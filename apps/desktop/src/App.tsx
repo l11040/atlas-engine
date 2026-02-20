@@ -1,11 +1,12 @@
-import { Button } from "@/components/ui/button";
+import { AuthStatusCard } from "@/components/claude/auth-status-card";
+import { useClaudeAuthStatus } from "@/hooks/use-claude-auth-status";
 
 export default function App() {
+  const { authState, authMessage, refreshAuthStatus } = useClaudeAuthStatus();
+
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col items-start justify-center gap-4 p-8">
-      <p className="text-sm text-muted-foreground">Electron + React + Tailwind + shadcn/ui</p>
-      <h1 className="text-4xl font-semibold tracking-tight">Atlas Desktop</h1>
-      <Button>Start Building</Button>
+    <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col items-end p-4">
+      <AuthStatusCard authState={authState} authMessage={authMessage} onRefresh={refreshAuthStatus} />
     </main>
   );
 }

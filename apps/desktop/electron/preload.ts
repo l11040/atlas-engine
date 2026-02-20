@@ -1,0 +1,37 @@
+import { contextBridge, ipcRenderer } from "electron";
+import {
+  IPC_CHANNELS,
+  type AtlasDesktopApi,
+  type ClaudeAuthStatusRequest,
+  type ClaudeAuthStatusResponse,
+  type ClaudeCancelRequest,
+  type ClaudeCancelResponse,
+  type ClaudeEvent,
+  type ClaudeRunRequest,
+  type ClaudeRunResponse
+} from "../shared/ipc";
+
+const api: AtlasDesktopApi = {
+  runClaude(request: ClaudeRunRequest): Promise<ClaudeRunResponse> {
+    return ipcRenderer.invoke(IPC_CHANNELS.claudeRun, request);
+  },
+  cancelClaude(request: ClaudeCancelRequest): Promise<ClaudeCancelResponse> {
+    return ipcRenderer.invoke(IPC_CHANNELS.claudeCancel, request);
+  },
+  getClaudeAuthStatus(request?: ClaudeAuthStatusRequest): Promise<ClaudeAuthStatusResponse> {
+    return ipcRenderer.invoke(IPC_CHANNELS.claudeAuthStatus, request);
+  },
+  onClaudeEvent(listener: (event: ClaudeEvent) => void) {
+    const wrapped = (_event: Electron.IpcRendererEvent, payload: ClaudeEvent) => {
+      listener(payload);
+    };
+
+    ipcRenderer.on(IPC_CHANNELS.claudeEvent, wrapped);
+
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.claudeEvent, wrapped);
+    };
+  }
+};
+
+contextBridge.exposeInMainWorld("atlas", api);

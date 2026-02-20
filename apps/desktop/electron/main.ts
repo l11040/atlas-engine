@@ -1,30 +1,21 @@
 import { app, BrowserWindow } from "electron";
-import path from "node:path";
+import { registerClaudeIpc } from "./ipc/register-claude-ipc";
+import { createMainWindow } from "./window/create-main-window";
 
-function createWindow() {
-  const win = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false
-    }
-  });
+process.on("uncaughtException", (error) => {
+  console.error("[main] uncaughtException", error);
+});
 
-  const devUrl = process.env.ELECTRON_RENDERER_URL;
-
-  if (devUrl) {
-    win.loadURL(devUrl);
-  } else {
-    win.loadFile(path.join(__dirname, "../dist/index.html"));
-  }
-}
+process.on("unhandledRejection", (reason) => {
+  console.error("[main] unhandledRejection", reason);
+});
 
 app.whenReady().then(() => {
-  createWindow();
+  registerClaudeIpc();
+  createMainWindow();
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
   });
 });
 
