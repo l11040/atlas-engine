@@ -1,12 +1,7 @@
 // 책임: Claude CLI 실행 세션의 상태·타임라인·결과를 관리한다.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type {
-  ClaudeEvent,
-  StreamJsonEvent,
-  StreamJsonResult,
-  StreamJsonToolUse
-} from "../../shared/ipc";
+import type { ClaudeEvent, StreamJsonEvent, StreamJsonResult, StreamJsonToolUse } from "../../shared/ipc";
 
 export type SessionStatus = "idle" | "running" | "completed" | "failed" | "cancelled";
 
@@ -60,18 +55,11 @@ export function useClaudeSession() {
   }, []);
 
   // 목적: tool_result를 기존 타임라인 엔트리에 매칭한다.
-  const handleToolResult = useCallback(
-    (toolUseId: string, content: string) => {
-      setToolTimeline((prev) =>
-        prev.map((entry) =>
-          entry.id === toolUseId
-            ? { ...entry, result: content, completedAt: Date.now() }
-            : entry
-        )
-      );
-    },
-    []
-  );
+  const handleToolResult = useCallback((toolUseId: string, content: string) => {
+    setToolTimeline((prev) =>
+      prev.map((entry) => (entry.id === toolUseId ? { ...entry, result: content, completedAt: Date.now() } : entry))
+    );
+  }, []);
 
   // 목적: stream-json 이벤트를 타입별로 분기 처리한다.
   const handleStreamEvent = useCallback(
@@ -86,10 +74,7 @@ export function useClaudeSession() {
         }
       } else if (event.type === "user") {
         for (const tr of event.message.content) {
-          const preview =
-            typeof tr.content === "string"
-              ? tr.content
-              : JSON.stringify(tr.content);
+          const preview = typeof tr.content === "string" ? tr.content : JSON.stringify(tr.content);
           handleToolResult(tr.tool_use_id, preview);
         }
       } else if (event.type === "result") {

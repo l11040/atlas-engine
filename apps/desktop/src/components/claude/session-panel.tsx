@@ -65,20 +65,12 @@ export function SessionPanel({ defaultCwd }: SessionPanelProps) {
           {isFinished && (
             <div className="flex items-center gap-3">
               {session.costUsd != null && (
-                <span className="text-2xs text-text-muted">
-                  비용: ${session.costUsd.toFixed(4)}
-                </span>
+                <span className="text-2xs text-text-muted">비용: ${session.costUsd.toFixed(4)}</span>
               )}
               {session.durationMs != null && (
-                <span className="text-2xs text-text-muted">
-                  소요: {(session.durationMs / 1000).toFixed(1)}s
-                </span>
+                <span className="text-2xs text-text-muted">소요: {(session.durationMs / 1000).toFixed(1)}s</span>
               )}
-              {session.errorMessage && (
-                <span className="text-2xs text-status-danger">
-                  {session.errorMessage}
-                </span>
-              )}
+              {session.errorMessage && <span className="text-2xs text-status-danger">{session.errorMessage}</span>}
               <Button onClick={handleReset} variant="outline" size="sm" className="ml-auto">
                 초기화
               </Button>

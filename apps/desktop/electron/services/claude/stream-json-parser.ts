@@ -5,10 +5,7 @@ import type { StreamJsonEvent } from "../../../shared/ipc";
 export type StreamJsonCallback = (event: StreamJsonEvent) => void;
 export type ParseErrorCallback = (rawLine: string, error: Error) => void;
 
-export function createStreamJsonParser(
-  onEvent: StreamJsonCallback,
-  onError?: ParseErrorCallback
-) {
+export function createStreamJsonParser(onEvent: StreamJsonCallback, onError?: ParseErrorCallback) {
   let buffer = "";
 
   function feed(chunk: string): void {

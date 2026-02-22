@@ -30,9 +30,7 @@ export function AuthStatusCard({ authState, authMessage, onRefresh }: AuthStatus
     <div className="flex w-fit items-center gap-2 rounded-lg border border-border-subtle bg-surface-base px-2.5 py-1.5 text-text-strong shadow-sm">
       <div className="flex items-center gap-2">
         {statusIcon}
-        <span className="text-xs font-semibold tracking-tight">
-          Claude CLI
-        </span>
+        <span className="text-xs font-semibold tracking-tight">Claude CLI</span>
       </div>
       <div className="h-3.5 w-px bg-border-subtle" />
       <Badge variant="outline" className="text-2xs py-0 text-text-muted">

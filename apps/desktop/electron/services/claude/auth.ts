@@ -69,8 +69,12 @@ function runRuntimeCheck(cwd: string, timeoutMs: number): Promise<ClaudeAuthStat
       complete(makeResponse("error", "Claude auth check timed out"));
     }, timeoutMs);
 
-    child.stdout.on("data", (chunk) => { stdout += chunk.toString(); });
-    child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
 
     child.once("error", (error) => {
       clearTimeout(timer);
@@ -102,7 +106,12 @@ function runRuntimeCheck(cwd: string, timeoutMs: number): Promise<ClaudeAuthStat
 
       const combined = `${stdout}\n${stderr}`.toLowerCase();
 
-      if (combined.includes("login") || combined.includes("not authenticated") || combined.includes("authentication") || combined.includes("setup-token")) {
+      if (
+        combined.includes("login") ||
+        combined.includes("not authenticated") ||
+        combined.includes("authentication") ||
+        combined.includes("setup-token")
+      ) {
         log("auth check unauthenticated");
         complete(makeResponse("unauthenticated", "Claude CLI is installed, but login is required"));
         return;

@@ -1,12 +1,7 @@
 // 책임: 작업 디렉토리의 git diff를 실행하고 파일별 구조화된 데이터로 파싱한다.
 
 import { spawn } from "node:child_process";
-import type {
-  GitDiffResponse,
-  GitDiffFileEntry,
-  GitDiffHunk,
-  GitDiffLine
-} from "../../../shared/ipc";
+import type { GitDiffResponse, GitDiffFileEntry, GitDiffHunk } from "../../../shared/ipc";
 
 // 목적: paths가 주어지면 해당 파일만, 없으면 전체 diff를 반환한다.
 export function getGitDiff(cwd: string, paths?: string[]): Promise<GitDiffResponse> {
@@ -22,8 +17,12 @@ export function getGitDiff(cwd: string, paths?: string[]): Promise<GitDiffRespon
     let stdout = "";
     let stderr = "";
 
-    child.stdout.on("data", (chunk) => { stdout += chunk.toString(); });
-    child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
 
     child.once("close", (exitCode) => {
       if (exitCode !== 0) {

@@ -1,13 +1,4 @@
-import {
-  FileText,
-  FilePen,
-  FileOutput,
-  Terminal,
-  Search,
-  Wrench,
-  Loader2,
-  ChevronRight
-} from "lucide-react";
+import { FileText, FilePen, FileOutput, Terminal, Search, Wrench, Loader2, ChevronRight } from "lucide-react";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import type { ToolTimelineEntry } from "@/hooks/use-claude-session";
 import { cn } from "@/lib/utils";
@@ -62,13 +53,9 @@ function TimelineEntry({ entry }: { entry: ToolTimelineEntry }) {
           <Icon className={cn("h-4 w-4 shrink-0", meta.colorClass)} />
         )}
 
-        <span className={cn("text-xs font-semibold shrink-0", meta.colorClass)}>
-          {entry.toolName}
-        </span>
+        <span className={cn("text-xs font-semibold shrink-0", meta.colorClass)}>{entry.toolName}</span>
 
-        <span className="truncate text-xs text-text-muted">
-          {summarizeInput(entry.toolName, entry.input)}
-        </span>
+        <span className="truncate text-xs text-text-muted">{summarizeInput(entry.toolName, entry.input)}</span>
 
         {elapsed != null && (
           <span className="ml-auto shrink-0 text-2xs text-text-soft">
@@ -80,18 +67,14 @@ function TimelineEntry({ entry }: { entry: ToolTimelineEntry }) {
       <CollapsibleContent>
         <div className="px-3 pb-2 pl-10">
           <details className="text-2xs">
-            <summary className="cursor-pointer text-text-soft hover:text-text-muted">
-              Input
-            </summary>
+            <summary className="cursor-pointer text-text-soft hover:text-text-muted">Input</summary>
             <pre className="mt-1 max-h-[200px] overflow-auto whitespace-pre-wrap break-all rounded bg-surface-subtle p-2 text-text-muted">
               {JSON.stringify(entry.input, null, 2)}
             </pre>
           </details>
           {entry.result && (
             <details className="mt-1 text-2xs">
-              <summary className="cursor-pointer text-text-soft hover:text-text-muted">
-                Result
-              </summary>
+              <summary className="cursor-pointer text-text-soft hover:text-text-muted">Result</summary>
               <pre className="mt-1 max-h-[200px] overflow-auto whitespace-pre-wrap break-all rounded bg-surface-subtle p-2 text-text-muted">
                 {entry.result.slice(0, 2000)}
               </pre>
@@ -105,11 +88,7 @@ function TimelineEntry({ entry }: { entry: ToolTimelineEntry }) {
 
 export function ToolTimeline({ entries }: ToolTimelineProps) {
   if (entries.length === 0) {
-    return (
-      <div className="flex items-center justify-center py-8 text-xs text-text-soft">
-        도구 활동 대기 중...
-      </div>
-    );
+    return <div className="flex items-center justify-center py-8 text-xs text-text-soft">도구 활동 대기 중...</div>;
   }
 
   return (
