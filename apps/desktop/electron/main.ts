@@ -1,5 +1,7 @@
 import { app, BrowserWindow } from "electron";
 import { registerClaudeIpc } from "./ipc/register-claude-ipc";
+import { registerConfigIpc } from "./ipc/register-config-ipc";
+import { loadSettings } from "./services/config/settings";
 import { createMainWindow } from "./window/create-main-window";
 
 process.on("uncaughtException", (error) => {
@@ -10,7 +12,10 @@ process.on("unhandledRejection", (reason) => {
   console.error("[main] unhandledRejection", reason);
 });
 
-app.whenReady().then(() => {
+// 목적: 설정 캐시를 워밍한 뒤 IPC 핸들러를 등록한다.
+app.whenReady().then(async () => {
+  await loadSettings();
+  registerConfigIpc();
   registerClaudeIpc();
   createMainWindow();
 

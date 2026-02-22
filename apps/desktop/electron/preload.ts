@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from "electron";
 import {
   IPC_CHANNELS,
+  type AppSettings,
+  type AppSettingsUpdateRequest,
   type AtlasDesktopApi,
   type ClaudeAuthStatusRequest,
   type ClaudeAuthStatusResponse,
@@ -25,6 +27,12 @@ const api: AtlasDesktopApi = {
   },
   getGitDiff(request: GitDiffRequest): Promise<GitDiffResponse> {
     return ipcRenderer.invoke(IPC_CHANNELS.claudeGitDiff, request);
+  },
+  getConfig(): Promise<AppSettings> {
+    return ipcRenderer.invoke(IPC_CHANNELS.configGet);
+  },
+  updateConfig(request: AppSettingsUpdateRequest): Promise<AppSettings> {
+    return ipcRenderer.invoke(IPC_CHANNELS.configUpdate, request);
   },
   onClaudeEvent(listener: (event: ClaudeEvent) => void) {
     const wrapped = (_event: Electron.IpcRendererEvent, payload: ClaudeEvent) => {

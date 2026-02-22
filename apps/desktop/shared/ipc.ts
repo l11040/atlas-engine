@@ -1,10 +1,12 @@
-// 렌더러 → 메인: Claude CLI 실행 요청/취소, 인증 상태 조회, git diff 조회
+// 렌더러 → 메인: Claude CLI 실행 요청/취소, 인증 상태 조회, git diff 조회, 앱 설정 관리
 export const IPC_CHANNELS = {
   claudeRun: "claude:run",
   claudeCancel: "claude:cancel",
   claudeEvent: "claude:event",
   claudeAuthStatus: "claude:auth-status",
-  claudeGitDiff: "claude:git-diff"
+  claudeGitDiff: "claude:git-diff",
+  configGet: "config:get",
+  configUpdate: "config:update"
 } as const;
 
 // ─── Claude Run ─────────────────────────────────────────
@@ -111,13 +113,7 @@ export type StreamJsonEvent =
 
 // ─── Claude Event (IPC 스트리밍) ────────────────────────
 
-export type ClaudeEventPhase =
-  | "started"
-  | "stream-event"
-  | "stderr"
-  | "completed"
-  | "failed"
-  | "cancelled";
+export type ClaudeEventPhase = "started" | "stream-event" | "stderr" | "completed" | "failed" | "cancelled";
 
 export interface ClaudeEventBase {
   requestId: string;
@@ -133,7 +129,13 @@ export type ClaudeEvent =
   | (ClaudeEventBase & { phase: "started"; pid: number })
   | (ClaudeEventBase & { phase: "stream-event"; event: StreamJsonEvent })
   | (ClaudeEventBase & { phase: "stderr"; chunk: string })
-  | (ClaudeEventBase & { phase: "completed"; exitCode: number; signal: NodeJS.Signals | null; costUsd?: number; durationMs?: number })
+  | (ClaudeEventBase & {
+      phase: "completed";
+      exitCode: number;
+      signal: NodeJS.Signals | null;
+      costUsd?: number;
+      durationMs?: number;
+    })
   | (ClaudeEventBase & { phase: "failed"; error: string })
   | (ClaudeEventBase & { phase: "cancelled" });
 
@@ -172,6 +174,29 @@ export interface GitDiffResponse {
   error?: string;
 }
 
+// ─── App Settings ───────────────────────────────────────
+
+export type ClaudePermissionMode = "bypassPermissions" | "default";
+
+export interface ClaudeSettings {
+  timeoutMs: number;
+  permissionMode: ClaudePermissionMode;
+}
+
+export interface AppSettings {
+  defaultCwd: string;
+  claude: ClaudeSettings;
+}
+
+// 목적: 부분 업데이트를 지원하기 위한 재귀적 Partial 타입
+export type DeepPartial<T> = {
+  [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K];
+};
+
+export interface AppSettingsUpdateRequest {
+  settings: DeepPartial<AppSettings>;
+}
+
 // ─── Desktop API (preload → renderer) ───────────────────
 
 export interface AtlasDesktopApi {
@@ -180,4 +205,6 @@ export interface AtlasDesktopApi {
   getClaudeAuthStatus(request?: ClaudeAuthStatusRequest): Promise<ClaudeAuthStatusResponse>;
   getGitDiff(request: GitDiffRequest): Promise<GitDiffResponse>;
   onClaudeEvent(listener: (event: ClaudeEvent) => void): () => void;
+  getConfig(): Promise<AppSettings>;
+  updateConfig(request: AppSettingsUpdateRequest): Promise<AppSettings>;
 }

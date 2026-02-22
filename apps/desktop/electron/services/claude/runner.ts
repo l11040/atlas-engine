@@ -10,6 +10,7 @@ import {
   type ClaudeRunResponse,
   type StreamJsonResult
 } from "../../../shared/ipc";
+import { getSettings } from "../config/settings";
 import { createStreamJsonParser } from "./stream-json-parser";
 
 type ClaudeChildProcess = ChildProcessByStdio<null, Readable, Readable>;
@@ -46,12 +47,23 @@ export function runClaude(target: EventTarget, request: ClaudeRunRequest): Claud
     };
   }
 
+  const settings = getSettings();
+
   // 주의: stdin을 ignore로 고정해 CLI가 입력 대기 상태로 멈추는 현상을 방지한다.
   const child = spawn(
     "claude",
-    ["-p", request.prompt, "--output-format", "stream-json", "--verbose", "--permission-mode", "bypassPermissions"],
+    [
+      "-p",
+      request.prompt,
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      settings.claude.permissionMode
+    ],
     {
-      cwd: request.cwd || process.cwd() || app.getPath("home"),
+      // 목적: cwd 폴백 체인 — 요청값 → 설정값 → process.cwd() → 홈 디렉토리
+      cwd: request.cwd || settings.defaultCwd || process.cwd() || app.getPath("home"),
       shell: false,
       stdio: ["ignore", "pipe", "pipe"]
     }
@@ -103,7 +115,7 @@ export function runClaude(target: EventTarget, request: ClaudeRunRequest): Claud
     });
   });
 
-  // 이유: 다단계 tool 사용 세션은 오래 걸리므로 타임아웃을 300초로 설정한다.
+  // 이유: 다단계 tool 사용 세션은 오래 걸리므로 설정값 기준 타임아웃을 적용한다.
   const timeout = setTimeout(() => {
     if (settled) return;
     settled = true;
@@ -115,7 +127,7 @@ export function runClaude(target: EventTarget, request: ClaudeRunRequest): Claud
       error: "Claude response timed out",
       timestamp: Date.now()
     });
-  }, 300_000);
+  }, settings.claude.timeoutMs);
 
   child.once("error", (error) => {
     if (settled) return;
@@ -124,9 +136,7 @@ export function runClaude(target: EventTarget, request: ClaudeRunRequest): Claud
     runningJobs.delete(request.requestId);
 
     const friendlyError =
-      (error as NodeJS.ErrnoException).code === "ENOENT"
-        ? "claude command was not found in PATH"
-        : error.message;
+      (error as NodeJS.ErrnoException).code === "ENOENT" ? "claude command was not found in PATH" : error.message;
 
     emitClaudeEvent(target, {
       requestId: request.requestId,
