@@ -34,6 +34,16 @@ This file defines project-specific working rules for Claude Code in this reposit
   - visual components in `src/components/*`
 - IPC contracts must be defined only in `apps/desktop/shared/ipc.ts`.
 
+## UI Component Rules (Mandatory)
+- 기본 UI 요소는 **shadcn/ui 컴포넌트를 최우선으로 사용**한다.
+- shadcn 컴포넌트가 존재하면 네이티브 HTML 태그(`<input>`, `<textarea>`, `<button>` 등)를 직접 사용하지 않는다.
+- 현재 설치된 shadcn 컴포넌트: `Button`, `Input`, `Textarea`, `Badge`, `Collapsible`
+- 새 컴포넌트가 필요하면 `npx shadcn@latest add <component>` 로 설치한 뒤 사용한다.
+- shadcn 컴포넌트는 `@/components/ui/*`에 위치하며 직접 수정하지 않는다. 커스터마이징은 `className` prop으로 처리한다.
+- 펼치기/접기 UI에는 `Collapsible` (`@radix-ui/react-collapsible`)을 사용한다.
+- 상태 뱃지 표시에는 `Badge` 를 사용한다.
+- feature 컴포넌트(`src/components/*`)에서 새 네이티브 HTML 입력 요소를 도입하기 전에 shadcn에 동등한 컴포넌트가 있는지 먼저 확인한다.
+
 ## Design Token Rules (Mandatory)
 - Define design tokens only in `apps/desktop/src/index.css` `:root` block.
 - Group tokens by category:

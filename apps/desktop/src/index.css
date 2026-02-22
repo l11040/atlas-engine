@@ -52,6 +52,25 @@
   --color-status-warning: #f59e0b;
   --color-status-danger: #f43f5e;
 
+  /* Design Tokens - Diff */
+  --color-diff-addition-bg: #dcfce7;
+  --color-diff-addition-text: #166534;
+  --color-diff-deletion-bg: #fee2e2;
+  --color-diff-deletion-text: #991b1b;
+  --color-diff-modified-bg: #fef3c7;
+  --color-diff-modified-text: #92400e;
+  --color-diff-hunk-bg: #eff6ff;
+  --color-diff-hunk-text: #1d4ed8;
+  --color-diff-line-number: #a1a1aa;
+
+  /* Design Tokens - Tool Activity */
+  --color-tool-read: #3b82f6;
+  --color-tool-write: #f59e0b;
+  --color-tool-edit: #10b981;
+  --color-tool-bash: #8b5cf6;
+  --color-tool-search: #6366f1;
+  --color-tool-default: #71717a;
+
   /* Design Tokens - Typography */
   --font-family-sans:
     "Pretendard Variable", "Pretendard", "SUIT Variable", "SUIT", "Noto Sans KR",

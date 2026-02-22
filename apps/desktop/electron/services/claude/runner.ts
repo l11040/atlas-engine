@@ -7,8 +7,10 @@ import {
   type ClaudeCancelResponse,
   type ClaudeEvent,
   type ClaudeRunRequest,
-  type ClaudeRunResponse
+  type ClaudeRunResponse,
+  type StreamJsonResult
 } from "../../../shared/ipc";
+import { createStreamJsonParser } from "./stream-json-parser";
 
 type ClaudeChildProcess = ChildProcessByStdio<null, Readable, Readable>;
 const runningJobs = new Map<string, ClaudeChildProcess>();
@@ -47,7 +49,7 @@ export function runClaude(target: EventTarget, request: ClaudeRunRequest): Claud
   // 주의: stdin을 ignore로 고정해 CLI가 입력 대기 상태로 멈추는 현상을 방지한다.
   const child = spawn(
     "claude",
-    ["-p", request.prompt, "--output-format", "text", "--permission-mode", "bypassPermissions"],
+    ["-p", request.prompt, "--output-format", "stream-json", "--verbose", "--permission-mode", "bypassPermissions"],
     {
       cwd: request.cwd || process.cwd() || app.getPath("home"),
       shell: false,
@@ -64,33 +66,30 @@ export function runClaude(target: EventTarget, request: ClaudeRunRequest): Claud
     timestamp: Date.now()
   });
 
-  let stdout = "";
   let stderr = "";
   let settled = false;
+  // 목적: result 이벤트를 보존하여 completed 이벤트에 비용/시간 정보를 포함시킨다.
+  let lastResult: StreamJsonResult | null = null;
 
-  const timeout = setTimeout(() => {
-    // 목적: 장시간 무응답일 때 프로세스를 종료하고 실패 이벤트를 보낸다.
-    if (settled) return;
-    settled = true;
-    runningJobs.delete(request.requestId);
-    child.kill("SIGTERM");
-    emitClaudeEvent(target, {
-      requestId: request.requestId,
-      phase: "failed",
-      error: "Claude response timed out",
-      timestamp: Date.now()
-    });
-  }, 60000);
+  const parser = createStreamJsonParser(
+    (event) => {
+      if (event.type === "result") {
+        lastResult = event as StreamJsonResult;
+      }
+      emitClaudeEvent(target, {
+        requestId: request.requestId,
+        phase: "stream-event",
+        event,
+        timestamp: Date.now()
+      });
+    },
+    (rawLine, error) => {
+      console.warn("[claude-runner] stream-json 파싱 실패:", rawLine.slice(0, 200), error.message);
+    }
+  );
 
   child.stdout.on("data", (chunk) => {
-    const text = chunk.toString();
-    stdout += text;
-    emitClaudeEvent(target, {
-      requestId: request.requestId,
-      phase: "stdout",
-      chunk: text,
-      timestamp: Date.now()
-    });
+    parser.feed(chunk.toString());
   });
 
   child.stderr.on("data", (chunk) => {
@@ -103,6 +102,20 @@ export function runClaude(target: EventTarget, request: ClaudeRunRequest): Claud
       timestamp: Date.now()
     });
   });
+
+  // 이유: 다단계 tool 사용 세션은 오래 걸리므로 타임아웃을 300초로 설정한다.
+  const timeout = setTimeout(() => {
+    if (settled) return;
+    settled = true;
+    runningJobs.delete(request.requestId);
+    child.kill("SIGTERM");
+    emitClaudeEvent(target, {
+      requestId: request.requestId,
+      phase: "failed",
+      error: "Claude response timed out",
+      timestamp: Date.now()
+    });
+  }, 300_000);
 
   child.once("error", (error) => {
     if (settled) return;
@@ -127,6 +140,8 @@ export function runClaude(target: EventTarget, request: ClaudeRunRequest): Claud
     if (settled) return;
     settled = true;
     clearTimeout(timeout);
+    // 목적: 프로세스 종료 시 버퍼에 남은 마지막 줄을 처리한다.
+    parser.flush();
 
     if (!runningJobs.has(request.requestId)) return;
     runningJobs.delete(request.requestId);
@@ -136,7 +151,7 @@ export function runClaude(target: EventTarget, request: ClaudeRunRequest): Claud
       emitClaudeEvent(target, {
         requestId: request.requestId,
         phase: "failed",
-        error: stderr.trim() || stdout.trim() || `Claude exited with code ${exitCode ?? -1}`,
+        error: stderr.trim() || `Claude exited with code ${exitCode ?? -1}`,
         timestamp: Date.now()
       });
       return;
@@ -147,6 +162,8 @@ export function runClaude(target: EventTarget, request: ClaudeRunRequest): Claud
       phase: "completed",
       exitCode: exitCode ?? -1,
       signal,
+      costUsd: lastResult?.cost_usd,
+      durationMs: lastResult?.duration_ms,
       timestamp: Date.now()
     });
   });

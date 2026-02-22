@@ -8,7 +8,9 @@ import {
   type ClaudeCancelResponse,
   type ClaudeEvent,
   type ClaudeRunRequest,
-  type ClaudeRunResponse
+  type ClaudeRunResponse,
+  type GitDiffRequest,
+  type GitDiffResponse
 } from "../shared/ipc";
 
 const api: AtlasDesktopApi = {
@@ -20,6 +22,9 @@ const api: AtlasDesktopApi = {
   },
   getClaudeAuthStatus(request?: ClaudeAuthStatusRequest): Promise<ClaudeAuthStatusResponse> {
     return ipcRenderer.invoke(IPC_CHANNELS.claudeAuthStatus, request);
+  },
+  getGitDiff(request: GitDiffRequest): Promise<GitDiffResponse> {
+    return ipcRenderer.invoke(IPC_CHANNELS.claudeGitDiff, request);
   },
   onClaudeEvent(listener: (event: ClaudeEvent) => void) {
     const wrapped = (_event: Electron.IpcRendererEvent, payload: ClaudeEvent) => {

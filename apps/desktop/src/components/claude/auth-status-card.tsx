@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, Loader2, RotateCcw, XCircle } from "lucide-react";
 
 interface AuthStatusCardProps {
@@ -34,7 +35,9 @@ export function AuthStatusCard({ authState, authMessage, onRefresh }: AuthStatus
         </span>
       </div>
       <div className="h-3.5 w-px bg-border-subtle" />
-      <span className="text-2xs text-text-muted">{authStateLabel[authState] ?? authState}</span>
+      <Badge variant="outline" className="text-2xs py-0 text-text-muted">
+        {authStateLabel[authState] ?? authState}
+      </Badge>
       <Button
         variant="outline"
         onClick={onRefresh}

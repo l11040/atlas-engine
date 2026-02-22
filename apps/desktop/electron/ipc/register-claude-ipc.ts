@@ -1,7 +1,14 @@
 import { ipcMain } from "electron";
-import { IPC_CHANNELS, type ClaudeAuthStatusRequest, type ClaudeCancelRequest, type ClaudeRunRequest } from "../../shared/ipc";
+import {
+  IPC_CHANNELS,
+  type ClaudeAuthStatusRequest,
+  type ClaudeCancelRequest,
+  type ClaudeRunRequest,
+  type GitDiffRequest
+} from "../../shared/ipc";
 import { checkClaudeAuthStatus } from "../services/claude/auth";
 import { cancelClaude, runClaude } from "../services/claude/runner";
+import { getGitDiff } from "../services/git/diff";
 
 export function registerClaudeIpc() {
   // 주의: 모든 IPC 핸들러는 예외를 로깅한 뒤 다시 throw 해서 렌더러에서도 감지 가능하게 유지한다.
@@ -31,6 +38,16 @@ export function registerClaudeIpc() {
       return checkClaudeAuthStatus(request);
     } catch (error) {
       console.error("[ipc] claude:auth-status exception", error);
+      throw error;
+    }
+  });
+
+  // 목적: getGitDiff 서비스로 git diff 조회를 위임한다. paths로 특정 파일만 조회 가능.
+  ipcMain.handle(IPC_CHANNELS.claudeGitDiff, (_event, request: GitDiffRequest) => {
+    try {
+      return getGitDiff(request.cwd, request.paths);
+    } catch (error) {
+      console.error("[ipc] claude:git-diff exception", error);
       throw error;
     }
   });

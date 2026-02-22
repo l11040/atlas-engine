@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import typography from "@tailwindcss/typography";
 
 export default {
   darkMode: ["class"],
@@ -11,7 +12,8 @@ export default {
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)"
+        sm: "calc(var(--radius) - 4px)",
+        xs: "var(--radius-xs)"
       },
       fontSize: {
         "2xs": "var(--font-size-2xs)",
@@ -46,8 +48,29 @@ export default {
           muted: "var(--color-text-muted)"
         },
         status: {
+          info: "var(--color-status-info)",
           success: "var(--color-status-success)",
+          warning: "var(--color-status-warning)",
           danger: "var(--color-status-danger)"
+        },
+        diff: {
+          "addition-bg": "var(--color-diff-addition-bg)",
+          "addition-text": "var(--color-diff-addition-text)",
+          "modified-bg": "var(--color-diff-modified-bg)",
+          "modified-text": "var(--color-diff-modified-text)",
+          "deletion-bg": "var(--color-diff-deletion-bg)",
+          "deletion-text": "var(--color-diff-deletion-text)",
+          "hunk-bg": "var(--color-diff-hunk-bg)",
+          "hunk-text": "var(--color-diff-hunk-text)",
+          "line-number": "var(--color-diff-line-number)"
+        },
+        tool: {
+          read: "var(--color-tool-read)",
+          write: "var(--color-tool-write)",
+          edit: "var(--color-tool-edit)",
+          bash: "var(--color-tool-bash)",
+          search: "var(--color-tool-search)",
+          default: "var(--color-tool-default)"
         },
         "border-subtle": "var(--color-border-subtle)",
         primary: {
@@ -62,5 +85,5 @@ export default {
       }
     }
   },
-  plugins: []
+  plugins: [typography]
 } satisfies Config;
