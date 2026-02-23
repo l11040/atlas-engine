@@ -27,7 +27,7 @@ export function PhaseContent({ viewPhase, phaseData, ticket }: PhaseContentProps
   }
 
   if (viewPhase === "plan") {
-    return <TodoProgress todos={phaseData.todos} />;
+    return <TodoProgress todos={phaseData.todos} ticket={ticket} />;
   }
 
   // 목적: hold 상태에서는 마지막 결과를 통합 표시한다.
@@ -40,7 +40,7 @@ export function PhaseContent({ viewPhase, phaseData, ticket }: PhaseContentProps
             semantic={{ label: "의미 검증 (semantic)", result: phaseData.dorSemanticResult, reason: phaseData.dorSemanticReason }}
           />
         )}
-        {phaseData.todos.length > 0 && <TodoProgress todos={phaseData.todos} />}
+        {phaseData.todos.length > 0 && <TodoProgress todos={phaseData.todos} ticket={ticket} />}
       </div>
     );
   }
