@@ -158,6 +158,7 @@ export default function PipelinePage() {
               currentPhase={currentPhase}
               selectedPhase={viewPhase !== "idle" ? viewPhase : undefined}
               holdAtPhase={holdAtPhase}
+              isRunning={isRunning}
               onPhaseClick={setSelectedPhase}
             />
           )}

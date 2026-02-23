@@ -36,11 +36,13 @@ interface PhasePipelineProps {
   selectedPhase?: PipelinePhase;
   /** hold 상태일 때 어느 단계에서 멈췄는지 표시 */
   holdAtPhase?: PipelinePhase;
+  /** 파이프라인이 현재 실행 중인지 여부 — active phase의 스피너 표시에 사용 */
+  isRunning?: boolean;
   /** phase 클릭 콜백 — done/active/hold 상태인 phase만 클릭 가능 */
   onPhaseClick?: (phase: PipelinePhase) => void;
 }
 
-export function PhasePipeline({ currentPhase, selectedPhase, holdAtPhase, onPhaseClick }: PhasePipelineProps) {
+export function PhasePipeline({ currentPhase, selectedPhase, holdAtPhase, isRunning, onPhaseClick }: PhasePipelineProps) {
   return (
     <div className="flex items-center gap-0.5">
       {PHASES.map((phase, idx) => {
@@ -66,17 +68,25 @@ export function PhasePipeline({ currentPhase, selectedPhase, holdAtPhase, onPhas
               disabled={!isClickable}
               onClick={() => isClickable && onPhaseClick(phase.key)}
               className={cn(
-                "flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-2xs font-medium transition-colors",
+                "relative flex items-center gap-1.5 rounded-md px-2.5 py-1 text-2xs font-medium transition-all duration-150",
+                // 기본 상태 색상
                 state === "done" && "text-status-success",
-                state === "active" && "bg-brand-500/10 text-brand-600",
+                state === "active" && "text-brand-600",
                 state === "pending" && "text-text-soft",
-                state === "hold" && "bg-status-warning/10 text-status-warning",
-                isSelected && "ring-1 ring-brand-500/50",
-                isClickable && "cursor-pointer hover:opacity-80"
+                state === "hold" && "text-status-warning",
+                // 선택/호버 배경: 폰트 색상의 10% (color-mix 토큰)
+                isSelected && state === "done" && "bg-phase-done-bg",
+                isSelected && state === "active" && "bg-phase-active-bg",
+                isSelected && state === "hold" && "bg-phase-hold-bg",
+                isClickable && !isSelected && state === "done" && "hover:bg-phase-done-bg",
+                isClickable && !isSelected && state === "active" && "hover:bg-phase-active-bg",
+                isClickable && !isSelected && state === "hold" && "hover:bg-phase-hold-bg",
+                isClickable && "cursor-pointer"
               )}
             >
               {state === "done" && <Check className="h-3 w-3" />}
-              {state === "active" && <Loader2 className="h-3 w-3 animate-spin" />}
+              {state === "active" && isRunning && <Loader2 className="h-3 w-3 animate-spin" />}
+              {state === "active" && !isRunning && <Check className="h-3 w-3" />}
               {state === "hold" && <AlertCircle className="h-3 w-3" />}
               {state === "pending" && (
                 <div className="h-1.5 w-1.5 rounded-full bg-neutral-300" />

@@ -67,6 +67,9 @@
   --color-phase-done: var(--color-status-success);
   --color-phase-active: var(--color-brand-500);
   --color-phase-pending: var(--color-neutral-400);
+  --color-phase-done-bg: color-mix(in srgb, var(--color-status-success) 10%, transparent);
+  --color-phase-active-bg: color-mix(in srgb, var(--color-brand-600) 10%, transparent);
+  --color-phase-hold-bg: color-mix(in srgb, var(--color-status-warning) 10%, transparent);
 
   /* Design Tokens - Tool Activity */
   --color-tool-read: #3b82f6;

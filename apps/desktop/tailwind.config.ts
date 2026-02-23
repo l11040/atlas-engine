@@ -81,6 +81,11 @@ export default {
           search: "var(--color-tool-search)",
           default: "var(--color-tool-default)"
         },
+        phase: {
+          "done-bg": "var(--color-phase-done-bg)",
+          "active-bg": "var(--color-phase-active-bg)",
+          "hold-bg": "var(--color-phase-hold-bg)"
+        },
         "border-subtle": "var(--color-border-subtle)",
         primary: {
           DEFAULT: "hsl(var(--primary))",
