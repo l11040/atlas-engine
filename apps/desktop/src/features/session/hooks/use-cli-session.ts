@@ -1,7 +1,7 @@
 // 책임: CLI 실행 세션의 상태·타임라인·결과를 provider에 관계없이 관리한다.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { CliEvent, ProviderType } from "../../shared/ipc";
+import type { CliEvent, ProviderType } from "@shared/ipc";
 
 export type SessionStatus = "idle" | "running" | "completed" | "failed" | "cancelled";
 

@@ -63,6 +63,11 @@
   --color-diff-hunk-text: #1d4ed8;
   --color-diff-line-number: #a1a1aa;
 
+  /* Design Tokens - Phase Pipeline */
+  --color-phase-done: var(--color-status-success);
+  --color-phase-active: var(--color-brand-500);
+  --color-phase-pending: var(--color-neutral-400);
+
   /* Design Tokens - Tool Activity */
   --color-tool-read: #3b82f6;
   --color-tool-write: #f59e0b;

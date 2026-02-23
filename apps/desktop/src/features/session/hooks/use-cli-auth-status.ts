@@ -1,6 +1,6 @@
 // 책임: 지정된 CLI provider의 인증 상태 조회 및 갱신을 관리한다.
 import { useEffect, useRef, useState } from "react";
-import type { CliAuthStatusResponse, ProviderType } from "../../shared/ipc";
+import type { CliAuthStatusResponse, ProviderType } from "@shared/ipc";
 
 type AuthViewState = "checking" | CliAuthStatusResponse["status"];
 

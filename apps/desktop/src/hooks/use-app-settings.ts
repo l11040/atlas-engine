@@ -1,6 +1,6 @@
 // 책임: 앱 설정 상태 관리 및 IPC를 통한 조회·수정을 관리한다.
 import { useCallback, useEffect, useState } from "react";
-import type { AppSettings, DeepPartial } from "../../shared/ipc";
+import type { AppSettings, DeepPartial } from "@shared/ipc";
 
 export function useAppSettings() {
   const [settings, setSettings] = useState<AppSettings | null>(null);

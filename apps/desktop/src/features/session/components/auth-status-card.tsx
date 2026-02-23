@@ -9,7 +9,7 @@ import {
   DialogTrigger
 } from "@/components/ui/dialog";
 import { CheckCircle2, Loader2, RotateCcw, XCircle } from "lucide-react";
-import type { CliAuthStatus, ProviderType } from "../../../shared/ipc";
+import type { CliAuthStatus, ProviderType } from "@shared/ipc";
 
 interface ProviderStatus {
   provider: ProviderType;
@@ -107,10 +107,10 @@ export function AuthStatusCard() {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <button className="flex h-9 items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-base px-2.5 text-text-strong shadow-sm transition-colors hover:bg-surface-subtle">
+        <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs font-semibold">
           <SummaryIcon state={activeState} />
-          <span className="text-xs font-semibold">{summaryLabel(activeProvider, activeState)}</span>
-        </button>
+          {summaryLabel(activeProvider, activeState)}
+        </Button>
       </DialogTrigger>
 
       <DialogContent className="max-w-sm border-border-subtle bg-surface-base">

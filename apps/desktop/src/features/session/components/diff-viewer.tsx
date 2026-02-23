@@ -1,7 +1,7 @@
 import { ChevronRight } from "lucide-react";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
-import type { GitDiffResponse, GitDiffFileEntry } from "../../../shared/ipc";
+import type { GitDiffResponse, GitDiffFileEntry } from "@shared/ipc";
 import { cn } from "@/lib/utils";
 
 interface DiffViewerProps {

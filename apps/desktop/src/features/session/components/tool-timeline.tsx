@@ -1,6 +1,6 @@
 import { FileText, FilePen, FileOutput, Terminal, Search, Wrench, Loader2, ChevronRight } from "lucide-react";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
-import type { ToolTimelineEntry } from "@/hooks/use-cli-session";
+import type { ToolTimelineEntry } from "../hooks/use-cli-session";
 import { cn } from "@/lib/utils";
 
 interface ToolTimelineProps {

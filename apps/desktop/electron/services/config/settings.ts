@@ -28,7 +28,7 @@ function deepMergeDefaults(
 ): Record<string, unknown> {
   const result: Record<string, unknown> = { ...defaults };
 
-  for (const key of Object.keys(defaults)) {
+  for (const key of Object.keys(overrides)) {
     const defaultVal = defaults[key];
     const overrideVal = overrides[key];
 

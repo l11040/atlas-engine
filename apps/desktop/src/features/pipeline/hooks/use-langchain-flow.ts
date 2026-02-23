@@ -1,7 +1,7 @@
 // 책임: LangChain 플로우 실행 상태를 관리하고 FlowEvent 리스너로 UI 상태를 갱신한다.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { FlowEvent, FlowMetadata, ProviderType } from "../../shared/ipc";
+import type { FlowEvent, FlowMetadata, FlowType, ProviderType } from "@shared/ipc";
 
 export type FlowStatus = "idle" | "running" | "completed" | "error";
 
@@ -101,7 +101,7 @@ export function useLangchainFlow(defaultProvider: ProviderType = "claude") {
   }, []);
 
   const invoke = useCallback(
-    async (prompt: string, cwd?: string, provider?: ProviderType) => {
+    async (prompt: string, cwd?: string, provider?: ProviderType, flowType?: FlowType, startFromNode?: string) => {
       const id = crypto.randomUUID();
       flowIdRef.current = id;
       setNodes([]);
@@ -112,9 +112,11 @@ export function useLangchainFlow(defaultProvider: ProviderType = "claude") {
 
       const res = await window.atlas.invokeFlow({
         flowId: id,
+        flowType: flowType ?? "prompt",
         provider: provider ?? defaultProvider,
         prompt: prompt.trim(),
-        ...(cwd ? { cwd } : {})
+        ...(cwd ? { cwd } : {}),
+        ...(startFromNode ? { startFromNode } : {})
       });
 
       if (res.status === "rejected") {

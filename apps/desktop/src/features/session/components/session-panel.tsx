@@ -1,12 +1,12 @@
 import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { useCliSession } from "@/hooks/use-cli-session";
+import { useCliSession } from "../hooks/use-cli-session";
 import { useGitDiff } from "@/hooks/use-git-diff";
 import { PromptInput } from "./prompt-input";
 import { ToolTimeline } from "./tool-timeline";
 import { AssistantMessage } from "./assistant-message";
 import { DiffViewer } from "./diff-viewer";
-import type { ProviderType } from "../../../shared/ipc";
+import type { ProviderType } from "@shared/ipc";
 
 interface SessionPanelProps {
   /** 사용할 CLI provider */

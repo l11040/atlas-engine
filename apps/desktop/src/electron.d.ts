@@ -1,4 +1,4 @@
-import type { AtlasDesktopApi } from "../shared/ipc";
+import type { AtlasDesktopApi } from "@shared/ipc";
 
 declare global {
   interface Window {

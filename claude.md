@@ -9,11 +9,45 @@ This file defines project-specific working rules for Claude Code in this reposit
 - Claude Code supports importing additional markdown files using `@path/to/file.md`.
 
 ## Repository Structure
-- `apps/desktop`: Electron desktop app (React + TypeScript + Tailwind + shadcn)
-- `apps/desktop/electron`: main process, IPC, and Claude CLI services
-- `apps/desktop/src`: renderer app, hooks, and UI components
-- `apps/desktop/shared`: shared IPC contracts between main/preload/renderer
-- `packages/*`: reserved for shared packages in the Turborepo workspace
+
+```
+apps/desktop/                      Electron desktop app (React + TypeScript + Tailwind + shadcn)
+├── electron/                      메인 프로세스
+│   ├── main.ts                    앱 진입점
+│   ├── preload.ts                 preload 스크립트 (contextBridge)
+│   ├── ipc/                       IPC 핸들러 등록
+│   ├── services/
+│   │   ├── config/                앱 설정 읽기/쓰기
+│   │   ├── git/                   Git diff 서비스
+│   │   ├── langchain/             LangGraph 기반 flow 실행 엔진
+│   │   └── providers/             CLI provider 추상화 (claude, codex)
+│   │       ├── claude/            Claude CLI provider + stream-json 파서
+│   │       ├── codex/             Codex CLI provider + jsonl 파서
+│   │       ├── registry.ts        provider 레지스트리
+│   │       └── types.ts           provider 공통 인터페이스
+│   └── window/                    BrowserWindow 생성
+├── shared/                        메인/프리로드/렌더러 공유 계약
+│   └── ipc.ts                     IPC 채널·타입 정의 (단일 소스)
+└── src/                           렌더러 (React)
+    ├── main.tsx                   렌더러 진입점
+    ├── router.tsx                 react-router 라우트 정의
+    ├── pages/                     라우트별 페이지 컴포넌트
+    │   └── main-page.tsx
+    ├── features/                  기능별 모듈 (컴포넌트 + 훅 + 페이지)
+    │   ├── pipeline/              Ticket → Todo 파이프라인
+    │   │   ├── pipeline-page.tsx  파이프라인 페이지
+    │   │   ├── components/        파이프라인 UI 컴포넌트
+    │   │   ├── hooks/             파이프라인 상태 관리 훅
+    │   │   └── phases/            phase별 콘텐츠 (intake, dor, plan)
+    │   ├── session/               CLI 세션·인증 관련
+    │   │   ├── components/        세션 UI 컴포넌트
+    │   │   └── hooks/             CLI 인증·세션 훅
+    │   └── settings/              앱 설정 페이지
+    ├── components/ui/             shadcn/ui 컴포넌트 (수정 금지)
+    ├── hooks/                     공유 커스텀 훅 (feature에 속하지 않는 것)
+    └── lib/                       유틸리티 함수
+packages/*                         Turborepo 공유 패키지 (예약)
+```
 
 ## File Naming Convention (Mandatory)
 - All project source filenames must use **kebab-case**.
@@ -25,24 +59,33 @@ This file defines project-specific working rules for Claude Code in this reposit
   - `auth-status-card.tsx`
 
 ## Development Rules
-- Keep Electron main process logic split by responsibility:
-  - window creation in `electron/window/*`
-  - IPC registration in `electron/ipc/*`
-  - Claude CLI runtime/auth logic in `electron/services/claude/*`
-- Keep renderer UI logic split by responsibility:
-  - state/effects in `src/hooks/*`
-  - visual components in `src/components/*`
-- IPC contracts must be defined only in `apps/desktop/shared/ipc.ts`.
+
+### Electron 메인 프로세스
+- window 생성: `electron/window/*`
+- IPC 핸들러 등록: `electron/ipc/*`
+- CLI provider 추상화: `electron/services/providers/*`
+- LangGraph flow 엔진: `electron/services/langchain/*`
+
+### 렌더러 (feature-based 구조)
+- 새 기능은 `src/features/<feature-name>/` 아래에 페이지·컴포넌트·훅을 함께 배치한다.
+- feature 내부 구조: `components/`, `hooks/`, 필요 시 `phases/` 등 하위 폴더를 사용한다.
+- feature에 속하지 않는 공유 훅은 `src/hooks/`에 둔다.
+- 라우트 페이지 컴포넌트는 `src/pages/` 또는 해당 feature 폴더에 둔다.
+- feature 간 import는 `@/features/<name>/...` 절대 경로를 사용한다.
+
+### IPC 계약
+- IPC 타입·채널은 `apps/desktop/shared/ipc.ts` 단일 파일에서만 정의한다.
+- 렌더러에서는 `@shared/ipc` 경로 별칭으로 import한다.
 
 ## UI Component Rules (Mandatory)
 - 기본 UI 요소는 **shadcn/ui 컴포넌트를 최우선으로 사용**한다.
 - shadcn 컴포넌트가 존재하면 네이티브 HTML 태그(`<input>`, `<textarea>`, `<button>` 등)를 직접 사용하지 않는다.
-- 현재 설치된 shadcn 컴포넌트: `Button`, `Input`, `Textarea`, `Badge`, `Collapsible`
+- 현재 설치된 shadcn 컴포넌트: `Button`, `Input`, `Textarea`, `Badge`, `Collapsible`, `Dialog`, `Sheet`, `Label`, `Select`
 - 새 컴포넌트가 필요하면 `npx shadcn@latest add <component>` 로 설치한 뒤 사용한다.
 - shadcn 컴포넌트는 `@/components/ui/*`에 위치하며 직접 수정하지 않는다. 커스터마이징은 `className` prop으로 처리한다.
 - 펼치기/접기 UI에는 `Collapsible` (`@radix-ui/react-collapsible`)을 사용한다.
 - 상태 뱃지 표시에는 `Badge` 를 사용한다.
-- feature 컴포넌트(`src/components/*`)에서 새 네이티브 HTML 입력 요소를 도입하기 전에 shadcn에 동등한 컴포넌트가 있는지 먼저 확인한다.
+- feature 컴포넌트(`src/features/*/components/*`)에서 새 네이티브 HTML 입력 요소를 도입하기 전에 shadcn에 동등한 컴포넌트가 있는지 먼저 확인한다.
 
 ## Design Token Rules (Mandatory)
 - Define design tokens only in `apps/desktop/src/index.css` `:root` block.
@@ -68,7 +111,7 @@ This file defines project-specific working rules for Claude Code in this reposit
 - 주석은 설명 대상 코드 바로 위에 작성한다.
 - 동작이 바뀌면 주석도 즉시 갱신한다. 오래된 주석은 허용하지 않는다.
 
-### Custom Hook (`src/hooks/*`)
+### Custom Hook (`src/hooks/*`, `src/features/*/hooks/*`)
 - 파일 상단에 훅의 **책임 범위**를 한 줄로 명시한다.
   - `// 책임: Claude CLI 인증 상태 조회 및 갱신을 관리한다.`
 - React 라이프사이클 관련 비자명한 결정에 `// 이유:`를 작성한다.
@@ -80,7 +123,7 @@ This file defines project-specific working rules for Claude Code in this reposit
 - 외부로 노출하는 `return` 객체에 파생 상태(`useMemo`)의 **의도**를 명시한다.
 - 자명한 `useState` 선언, 단순 setter 전달에는 주석을 달지 않는다.
 
-### Component (`src/components/*`)
+### Component (`src/features/*/components/*`)
 - props 인터페이스가 비자명한 콜백이나 조건부 props를 포함하면 해당 필드에 주석을 작성한다.
 - 조건부 렌더링이나 상태-레이블 매핑 로직이 복잡하면 `// 목적:`을 작성한다.
 - 단순 표시용 컴포넌트(props → JSX 직결)에는 주석을 달지 않는다.

@@ -4,7 +4,8 @@
     "baseUrl": ".",
     "types": ["vite/client", "node"],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@shared/*": ["./shared/*"]
     }
   },
   "include": ["src", "shared", "electron", "vite.config.ts", "tailwind.config.ts"]

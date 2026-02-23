@@ -198,10 +198,26 @@ export interface CliSettings {
   permissionMode: CliPermissionMode;
 }
 
+// 목적: 파이프라인 실행 결과를 저장하여 페이지 재진입 시 복원한다.
+export interface PipelineState {
+  currentPhase: PipelinePhase;
+  holdAtPhase?: PipelinePhase;
+  dorFormalResult?: "pass" | "hold";
+  dorFormalReason?: string;
+  dorSemanticResult?: "proceed" | "hold";
+  dorSemanticReason?: string;
+  todos: TodoItem[];
+  holdReason?: string;
+  activityLog: ActivityLogEntry[];
+}
+
 export interface AppSettings {
   defaultCwd: string;
   activeProvider: ProviderType;
   cli: CliSettings;
+  ticket?: Ticket;
+  todos?: TodoItem[];
+  pipeline?: PipelineState;
 }
 
 // 목적: 부분 업데이트를 지원하기 위한 재귀적 Partial 타입
@@ -215,11 +231,16 @@ export interface AppSettingsUpdateRequest {
 
 // ─── LangChain Flow ─────────────────────────────────────
 
+export type FlowType = "prompt" | "ticket-to-todo";
+
 export interface FlowInvokeRequest {
   flowId: string;
+  flowType: FlowType;
   provider: ProviderType;
   prompt: string;
   cwd?: string;
+  /** 목적: 특정 그래프 노드부터 재실행할 때 노드 이름을 지정한다. */
+  startFromNode?: string;
 }
 
 export interface FlowInvokeResponse {
@@ -249,6 +270,109 @@ export type FlowEvent =
   | { flowId: string; type: "node-error"; nodeId: string; error: string; timestamp: number }
   | { flowId: string; type: "flow-end"; result: string; metadata?: FlowMetadata; timestamp: number }
   | { flowId: string; type: "flow-error"; error: string; timestamp: number };
+
+// ─── Ticket (지라 이슈 정규화) ─────────────────────────────
+// 목적: 지라 이슈를 정규화한 Ticket과 하위 구조(AC, 시나리오)를 정의한다.
+// 계층: Ticket → Todo[] → WorkOrder[] (향후)
+
+export type WorkOrderMode = "fast" | "standard" | "strict";
+
+export interface TicketAC {
+  id: string;
+  description: string;
+}
+
+export interface TicketScenario {
+  id: string;
+  covers: string[];
+  description: string;
+}
+
+export interface Ticket {
+  jira_key: string;
+  summary: string;
+  acceptance_criteria: TicketAC[];
+  test_scenarios: TicketScenario[];
+  mode: WorkOrderMode;
+  mode_locked: boolean;
+}
+
+// ─── TodoItem (원자 작업 단위) ─────────────────────────────
+// 목적: Ticket에서 AC↔시나리오 매핑으로 생성된 원자 작업을 정의한다.
+// attempt이 마스터 — WorkOrder 생성 시 여기서 복사
+
+export type TodoStatus = "pending" | "in_progress" | "done" | "blocked";
+export type TodoRisk = "low" | "med" | "high";
+export type TodoRoute = "FE" | "BE";
+
+export interface TodoItem {
+  id: string;
+  title: string;
+  reason: string;
+  deps: string[];
+  risk: TodoRisk;
+  route: TodoRoute;
+  status: TodoStatus;
+  attempt: { n: number; max: number };
+  failure_history: FailureRecord[];
+}
+
+export interface FailureRecord {
+  wo_id: string;
+  attempt_n: number;
+  verdict: "FAIL";
+  taxonomy: string;
+}
+
+// ─── TodoList (전체 컨테이너) ──────────────────────────────
+
+export interface TodoList {
+  version: number;
+  updated_at: string;
+  jira_key: string;
+  items: TodoItem[];
+}
+
+// ─── Pipeline Phase ────────────────────────────────────────
+// 목적: 전체 파이프라인의 각 단계를 정의한다.
+// 현재 Ticket→Todo 변환은 intake → dor → plan 까지 사용한다.
+
+export type PipelinePhase =
+  | "idle" | "intake" | "dor" | "plan" | "workorder" | "explore" | "execute" | "verify" | "dod" | "done" | "hold";
+
+// ─── Activity / Run State ──────────────────────────────────
+
+export type RunStatus = "idle" | "running" | "completed" | "hold" | "failed";
+
+export interface ActivityLogEntry {
+  timestamp: number;
+  message: string;
+  type: "info" | "success" | "warning" | "error";
+}
+
+// ─── WorkOrder (향후 실행 단계용, 현재 미사용) ──────────────
+// 목적: Atlas 7-Section + 운영 메타데이터. Todo 실행 시 Orchestrator가 생성한다.
+
+export interface WorkOrderScope {
+  editable_paths: string[];
+  forbidden_paths: string[];
+}
+
+export interface WorkOrder {
+  wo_id: string;
+  task: string;
+  expected_outcome: string;
+  must_do: string[];
+  must_not: string[];
+  scope: WorkOrderScope;
+  verify_cmd: string;
+  evidence_required: string[];
+  mode: WorkOrderMode;
+  attempt: { n: number; max: number };
+  frozen: boolean;
+  origin_todo_id: string;
+  retry_of_wo_id: string | null;
+}
 
 // ─── Desktop API (preload → renderer) ───────────────────
 
