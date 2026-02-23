@@ -1,9 +1,13 @@
 // 렌더러 → 메인: CLI 실행 요청/취소, 인증 상태 조회, git diff 조회, 앱 설정 관리
+// 렌더러 → 메인: LangChain 플로우 실행/취소 및 이벤트 스트림
 export const IPC_CHANNELS = {
   cliRun: "cli:run",
   cliCancel: "cli:cancel",
   cliEvent: "cli:event",
   cliAuthStatus: "cli:auth-status",
+  flowInvoke: "flow:invoke",
+  flowCancel: "flow:cancel",
+  flowEvent: "flow:event",
   gitDiff: "git:diff",
   configGet: "config:get",
   configUpdate: "config:update"
@@ -209,6 +213,43 @@ export interface AppSettingsUpdateRequest {
   settings: DeepPartial<AppSettings>;
 }
 
+// ─── LangChain Flow ─────────────────────────────────────
+
+export interface FlowInvokeRequest {
+  flowId: string;
+  provider: ProviderType;
+  prompt: string;
+  cwd?: string;
+}
+
+export interface FlowInvokeResponse {
+  status: "accepted" | "rejected";
+  flowId: string;
+  message?: string;
+}
+
+export interface FlowCancelRequest {
+  flowId: string;
+}
+
+export interface FlowMetadata {
+  costUsd?: number;
+  durationMs?: number;
+  numTurns?: number;
+}
+
+// 목적: LangChain 플로우 실행 과정을 렌더러에서 시각화하기 위한 이벤트 union
+// flow-start/flow-end: 전체 플로우 수명
+// node-start/node-stream/node-end/node-error: 개별 노드(LLM 호출 등) 수명
+export type FlowEvent =
+  | { flowId: string; type: "flow-start"; timestamp: number }
+  | { flowId: string; type: "node-start"; nodeId: string; nodeName: string; input: string; timestamp: number }
+  | { flowId: string; type: "node-stream"; nodeId: string; chunk: string; timestamp: number }
+  | { flowId: string; type: "node-end"; nodeId: string; output: string; metadata?: FlowMetadata; timestamp: number }
+  | { flowId: string; type: "node-error"; nodeId: string; error: string; timestamp: number }
+  | { flowId: string; type: "flow-end"; result: string; metadata?: FlowMetadata; timestamp: number }
+  | { flowId: string; type: "flow-error"; error: string; timestamp: number };
+
 // ─── Desktop API (preload → renderer) ───────────────────
 
 export interface AtlasDesktopApi {
@@ -217,6 +258,9 @@ export interface AtlasDesktopApi {
   getCliAuthStatus(request: CliAuthCheckRequest): Promise<CliAuthStatusResponse>;
   getGitDiff(request: GitDiffRequest): Promise<GitDiffResponse>;
   onCliEvent(listener: (event: CliEvent) => void): () => void;
+  invokeFlow(request: FlowInvokeRequest): Promise<FlowInvokeResponse>;
+  cancelFlow(request: FlowCancelRequest): Promise<void>;
+  onFlowEvent(listener: (event: FlowEvent) => void): () => void;
   getConfig(): Promise<AppSettings>;
   updateConfig(request: AppSettingsUpdateRequest): Promise<AppSettings>;
 }

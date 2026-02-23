@@ -1,6 +1,7 @@
 import { app, BrowserWindow } from "electron";
 import { registerCliIpc } from "./ipc/register-cli-ipc";
 import { registerConfigIpc } from "./ipc/register-config-ipc";
+import { registerFlowIpc } from "./ipc/register-flow-ipc";
 import { loadSettings } from "./services/config/settings";
 import { createMainWindow } from "./window/create-main-window";
 
@@ -17,6 +18,7 @@ app.whenReady().then(async () => {
   await loadSettings();
   registerConfigIpc();
   registerCliIpc();
+  registerFlowIpc();
   createMainWindow();
 
   app.on("activate", () => {

@@ -17,7 +17,8 @@ import type {
 } from "../../../../shared/ipc";
 import { getSettings } from "../../config/settings";
 import type { CliProvider, EmitCliEvent } from "../types";
-import { createJsonlParser, type CodexJsonlEvent } from "./jsonl-parser";
+import { createJsonlParser } from "./jsonl-parser";
+import { createCodexNormalizer } from "./normalizer";
 
 type CodexChildProcess = ChildProcessByStdio<null, Readable, Readable>;
 const runningJobs = new Map<string, CodexChildProcess>();
@@ -26,82 +27,6 @@ const DEBUG = process.env.ATLAS_DEBUG_CODEX === "1";
 function log(...args: unknown[]) {
   if (!DEBUG) return;
   console.log("[codex-provider]", ...args);
-}
-
-// ─── Normalizer ─────────────────────────────────────────
-
-// 목적: Codex JSONL 이벤트를 정규화된 CliEvent로 변환한다.
-// 주의: Codex의 item 데이터는 중첩 객체(raw.item.type, raw.item.text 등)로 전달된다.
-function normalizeCodexEvent(requestId: string, raw: CodexJsonlEvent): CliEvent[] {
-  const base = { requestId, provider: "codex" as const, timestamp: Date.now() };
-  const events: CliEvent[] = [];
-  const type = raw.type as string | undefined;
-  const item = raw.item as Record<string, unknown> | undefined;
-
-  if (type === "item.completed" && item) {
-    const itemType = item.type as string | undefined;
-
-    if (itemType === "agent_message" || itemType === "message") {
-      // 목적: 에이전트 텍스트 메시지를 text 이벤트로 변환한다.
-      const text = (item.text as string) ?? "";
-      if (text) {
-        events.push({ ...base, phase: "text", text });
-      }
-    } else if (itemType === "command") {
-      // 목적: 커맨드 실행 완료를 tool-result 이벤트로 변환한다.
-      const id = (item.id as string) ?? crypto.randomUUID();
-      const output = (item.output as string) ?? "";
-      events.push({
-        ...base,
-        phase: "tool-result",
-        toolResult: { toolUseId: id, content: output }
-      });
-    } else if (itemType === "file_change") {
-      const id = (item.id as string) ?? crypto.randomUUID();
-      const filePath = (item.file_path as string) ?? "";
-      events.push({
-        ...base,
-        phase: "tool-result",
-        toolResult: { toolUseId: id, content: `File changed: ${filePath}` }
-      });
-    }
-    // 이유: reasoning 타입은 내부 추론 과정이므로 무시한다.
-  } else if (type === "item.started" && item) {
-    const itemType = item.type as string | undefined;
-
-    if (itemType === "command") {
-      const id = (item.id as string) ?? crypto.randomUUID();
-      const command = (item.command as string) ?? "";
-      events.push({
-        ...base,
-        phase: "tool-use",
-        tool: { id, name: "Bash", input: { command } }
-      });
-    } else if (itemType === "file_change") {
-      const id = (item.id as string) ?? crypto.randomUUID();
-      const filePath = (item.file_path as string) ?? "";
-      events.push({
-        ...base,
-        phase: "tool-use",
-        tool: { id, name: "Edit", input: { file_path: filePath } }
-      });
-    }
-  } else if (type === "turn.completed") {
-    // 목적: 턴 완료 시 usage 정보를 result 이벤트로 변환한다.
-    const usage = raw.usage as Record<string, unknown> | undefined;
-    if (usage) {
-      events.push({
-        ...base,
-        phase: "result",
-        result: {
-          numTurns: 1
-          // 이유: Codex JSONL은 비용 정보를 직접 제공하지 않는다.
-        }
-      });
-    }
-  }
-
-  return events;
 }
 
 // ─── Run ────────────────────────────────────────────────
@@ -147,6 +72,9 @@ function run(target: Electron.WebContents, request: CliRunRequest, emit: EmitCli
 
   let stderr = "";
   let settled = false;
+
+  // 목적: 세션별 상태 기반 normalizer를 생성하여 item.started/completed 간 ID를 추적한다.
+  const normalizeCodexEvent = createCodexNormalizer();
 
   const parser = createJsonlParser(
     (rawEvent) => {
