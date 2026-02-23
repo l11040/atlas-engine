@@ -80,7 +80,7 @@ packages/*                         Turborepo 공유 패키지 (예약)
 ## UI Component Rules (Mandatory)
 - 기본 UI 요소는 **shadcn/ui 컴포넌트를 최우선으로 사용**한다.
 - shadcn 컴포넌트가 존재하면 네이티브 HTML 태그(`<input>`, `<textarea>`, `<button>` 등)를 직접 사용하지 않는다.
-- 현재 설치된 shadcn 컴포넌트: `Button`, `Input`, `Textarea`, `Badge`, `Collapsible`, `Dialog`, `Sheet`, `Label`, `Select`
+- 현재 설치된 shadcn 컴포넌트: `Button`, `Input`, `Textarea`, `Badge`, `Collapsible`, `Dialog`, `Sheet`, `Label`, `Select`, `Separator`
 - 새 컴포넌트가 필요하면 `npx shadcn@latest add <component>` 로 설치한 뒤 사용한다.
 - shadcn 컴포넌트는 `@/components/ui/*`에 위치하며 직접 수정하지 않는다. 커스터마이징은 `className` prop으로 처리한다.
 - 펼치기/접기 UI에는 `Collapsible` (`@radix-ui/react-collapsible`)을 사용한다.
