@@ -1,19 +1,22 @@
 import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { useClaudeSession } from "@/hooks/use-claude-session";
+import { useCliSession } from "@/hooks/use-cli-session";
 import { useGitDiff } from "@/hooks/use-git-diff";
 import { PromptInput } from "./prompt-input";
 import { ToolTimeline } from "./tool-timeline";
 import { AssistantMessage } from "./assistant-message";
 import { DiffViewer } from "./diff-viewer";
+import type { ProviderType } from "../../../shared/ipc";
 
 interface SessionPanelProps {
+  /** 사용할 CLI provider */
+  provider?: ProviderType;
   /** 작업 디렉토리가 고정된 경우 외부에서 전달 */
   defaultCwd?: string;
 }
 
-export function SessionPanel({ defaultCwd }: SessionPanelProps) {
-  const session = useClaudeSession();
+export function SessionPanel({ provider = "claude", defaultCwd }: SessionPanelProps) {
+  const session = useCliSession(provider);
   const gitDiff = useGitDiff();
   // 이유: 완료 시 자동 diff fetch를 1회만 실행하기 위한 가드
   const didFetchDiffRef = useRef(false);

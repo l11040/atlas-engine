@@ -1,6 +1,6 @@
 // 책임: Claude CLI stream-json stdout을 줄 단위로 버퍼링하여 파싱된 이벤트를 콜백으로 전달한다.
 
-import type { StreamJsonEvent } from "../../../shared/ipc";
+import type { StreamJsonEvent } from "../../../../shared/ipc";
 
 export type StreamJsonCallback = (event: StreamJsonEvent) => void;
 export type ParseErrorCallback = (rawLine: string, error: Error) => void;

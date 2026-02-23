@@ -1,5 +1,5 @@
 import { app, BrowserWindow } from "electron";
-import { registerClaudeIpc } from "./ipc/register-claude-ipc";
+import { registerCliIpc } from "./ipc/register-cli-ipc";
 import { registerConfigIpc } from "./ipc/register-config-ipc";
 import { loadSettings } from "./services/config/settings";
 import { createMainWindow } from "./window/create-main-window";
@@ -16,7 +16,7 @@ process.on("unhandledRejection", (reason) => {
 app.whenReady().then(async () => {
   await loadSettings();
   registerConfigIpc();
-  registerClaudeIpc();
+  registerCliIpc();
   createMainWindow();
 
   app.on("activate", () => {

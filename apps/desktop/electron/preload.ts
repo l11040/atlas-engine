@@ -4,29 +4,29 @@ import {
   type AppSettings,
   type AppSettingsUpdateRequest,
   type AtlasDesktopApi,
-  type ClaudeAuthStatusRequest,
-  type ClaudeAuthStatusResponse,
-  type ClaudeCancelRequest,
-  type ClaudeCancelResponse,
-  type ClaudeEvent,
-  type ClaudeRunRequest,
-  type ClaudeRunResponse,
+  type CliAuthCheckRequest,
+  type CliAuthStatusResponse,
+  type CliCancelRequest,
+  type CliCancelResponse,
+  type CliEvent,
+  type CliRunRequest,
+  type CliRunResponse,
   type GitDiffRequest,
   type GitDiffResponse
 } from "../shared/ipc";
 
 const api: AtlasDesktopApi = {
-  runClaude(request: ClaudeRunRequest): Promise<ClaudeRunResponse> {
-    return ipcRenderer.invoke(IPC_CHANNELS.claudeRun, request);
+  runCli(request: CliRunRequest): Promise<CliRunResponse> {
+    return ipcRenderer.invoke(IPC_CHANNELS.cliRun, request);
   },
-  cancelClaude(request: ClaudeCancelRequest): Promise<ClaudeCancelResponse> {
-    return ipcRenderer.invoke(IPC_CHANNELS.claudeCancel, request);
+  cancelCli(request: CliCancelRequest): Promise<CliCancelResponse> {
+    return ipcRenderer.invoke(IPC_CHANNELS.cliCancel, request);
   },
-  getClaudeAuthStatus(request?: ClaudeAuthStatusRequest): Promise<ClaudeAuthStatusResponse> {
-    return ipcRenderer.invoke(IPC_CHANNELS.claudeAuthStatus, request);
+  getCliAuthStatus(request: CliAuthCheckRequest): Promise<CliAuthStatusResponse> {
+    return ipcRenderer.invoke(IPC_CHANNELS.cliAuthStatus, request);
   },
   getGitDiff(request: GitDiffRequest): Promise<GitDiffResponse> {
-    return ipcRenderer.invoke(IPC_CHANNELS.claudeGitDiff, request);
+    return ipcRenderer.invoke(IPC_CHANNELS.gitDiff, request);
   },
   getConfig(): Promise<AppSettings> {
     return ipcRenderer.invoke(IPC_CHANNELS.configGet);
@@ -34,15 +34,15 @@ const api: AtlasDesktopApi = {
   updateConfig(request: AppSettingsUpdateRequest): Promise<AppSettings> {
     return ipcRenderer.invoke(IPC_CHANNELS.configUpdate, request);
   },
-  onClaudeEvent(listener: (event: ClaudeEvent) => void) {
-    const wrapped = (_event: Electron.IpcRendererEvent, payload: ClaudeEvent) => {
+  onCliEvent(listener: (event: CliEvent) => void) {
+    const wrapped = (_event: Electron.IpcRendererEvent, payload: CliEvent) => {
       listener(payload);
     };
 
-    ipcRenderer.on(IPC_CHANNELS.claudeEvent, wrapped);
+    ipcRenderer.on(IPC_CHANNELS.cliEvent, wrapped);
 
     return () => {
-      ipcRenderer.removeListener(IPC_CHANNELS.claudeEvent, wrapped);
+      ipcRenderer.removeListener(IPC_CHANNELS.cliEvent, wrapped);
     };
   }
 };

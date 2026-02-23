@@ -8,9 +8,10 @@ const SETTINGS_FILENAME = "settings.json";
 
 const DEFAULT_SETTINGS: AppSettings = {
   defaultCwd: "",
-  claude: {
+  activeProvider: "claude",
+  cli: {
     timeoutMs: 300_000,
-    permissionMode: "bypassPermissions"
+    permissionMode: "auto"
   }
 };
 
@@ -60,17 +61,17 @@ export async function loadSettings(): Promise<AppSettings> {
     ) as unknown as AppSettings;
   } catch (_error) {
     // 이유: ENOENT(최초 실행)과 SyntaxError(파일 손상) 모두 기본값으로 안전하게 폴백한다.
-    cached = { ...DEFAULT_SETTINGS, claude: { ...DEFAULT_SETTINGS.claude } };
+    cached = { ...DEFAULT_SETTINGS, cli: { ...DEFAULT_SETTINGS.cli } };
   }
 
   return cached;
 }
 
-// 목적: 캐시된 설정을 동기 반환한다 (runner.ts 등 hot-path에서 사용).
+// 목적: 캐시된 설정을 동기 반환한다 (provider 등 hot-path에서 사용).
 export function getSettings(): AppSettings {
   if (!cached) {
     // 주의: loadSettings()가 호출되기 전에 접근하면 기본값을 반환한다.
-    return { ...DEFAULT_SETTINGS, claude: { ...DEFAULT_SETTINGS.claude } };
+    return { ...DEFAULT_SETTINGS, cli: { ...DEFAULT_SETTINGS.cli } };
   }
   return cached;
 }

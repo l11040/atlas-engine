@@ -1,50 +1,55 @@
-// 렌더러 → 메인: Claude CLI 실행 요청/취소, 인증 상태 조회, git diff 조회, 앱 설정 관리
+// 렌더러 → 메인: CLI 실행 요청/취소, 인증 상태 조회, git diff 조회, 앱 설정 관리
 export const IPC_CHANNELS = {
-  claudeRun: "claude:run",
-  claudeCancel: "claude:cancel",
-  claudeEvent: "claude:event",
-  claudeAuthStatus: "claude:auth-status",
-  claudeGitDiff: "claude:git-diff",
+  cliRun: "cli:run",
+  cliCancel: "cli:cancel",
+  cliEvent: "cli:event",
+  cliAuthStatus: "cli:auth-status",
+  gitDiff: "git:diff",
   configGet: "config:get",
   configUpdate: "config:update"
 } as const;
 
-// ─── Claude Run ─────────────────────────────────────────
+// ─── Provider ──────────────────────────────────────
 
-export type ClaudeRunStatus = "accepted" | "rejected";
+export type ProviderType = "claude" | "codex";
 
-export interface ClaudeRunRequest {
+// ─── CLI Run (정규화) ───────────────────────────────────
+
+export interface CliRunRequest {
   requestId: string;
+  provider: ProviderType;
   prompt: string;
   cwd?: string;
 }
 
-export interface ClaudeRunResponse {
-  status: ClaudeRunStatus;
+export interface CliRunResponse {
+  status: "accepted" | "rejected";
   requestId: string;
   message?: string;
 }
 
-export interface ClaudeCancelRequest {
+export interface CliCancelRequest {
   requestId: string;
 }
 
-export interface ClaudeCancelResponse {
+export interface CliCancelResponse {
   status: "cancelled" | "not_found";
   requestId: string;
 }
 
-// ─── Claude Auth ────────────────────────────────────────
+// ─── CLI Auth (정규화) ──────────────────────────────────
 
-export type ClaudeAuthStatus = "authenticated" | "unauthenticated" | "cli_missing" | "error";
+export type CliAuthStatus = "authenticated" | "unauthenticated" | "cli_missing" | "error";
 
-export interface ClaudeAuthStatusRequest {
+export interface CliAuthCheckRequest {
+  provider: ProviderType;
   cwd?: string;
   timeoutMs?: number;
 }
 
-export interface ClaudeAuthStatusResponse {
-  status: ClaudeAuthStatus;
+export interface CliAuthStatusResponse {
+  provider: ProviderType;
+  status: CliAuthStatus;
   message: string;
   checkedAt: number;
 }
@@ -111,33 +116,36 @@ export type StreamJsonEvent =
   | StreamJsonUserMessage
   | StreamJsonResult;
 
-// ─── Claude Event (IPC 스트리밍) ────────────────────────
+// ─── CLI Event (정규화된 스트리밍) ──────────────────────
 
-export type ClaudeEventPhase = "started" | "stream-event" | "stderr" | "completed" | "failed" | "cancelled";
-
-export interface ClaudeEventBase {
-  requestId: string;
-  phase: ClaudeEventPhase;
-  timestamp: number;
+export interface CliToolUse {
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
 }
 
-// started: 프로세스 spawn 성공
-// stream-event: 파싱된 stream-json 이벤트
-// stderr: 에러 진단용 raw 청크
-// completed: 정상 종료(exit 0) · failed: 비정상 종료 또는 에러 · cancelled: 사용자 취소
-export type ClaudeEvent =
-  | (ClaudeEventBase & { phase: "started"; pid: number })
-  | (ClaudeEventBase & { phase: "stream-event"; event: StreamJsonEvent })
-  | (ClaudeEventBase & { phase: "stderr"; chunk: string })
-  | (ClaudeEventBase & {
-      phase: "completed";
-      exitCode: number;
-      signal: NodeJS.Signals | null;
-      costUsd?: number;
-      durationMs?: number;
-    })
-  | (ClaudeEventBase & { phase: "failed"; error: string })
-  | (ClaudeEventBase & { phase: "cancelled" });
+export interface CliToolResult {
+  toolUseId: string;
+  content: string;
+}
+
+export interface CliSessionResult {
+  costUsd?: number;
+  durationMs?: number;
+  numTurns?: number;
+}
+
+// 목적: provider에 관계없이 렌더러가 소비하는 정규화된 이벤트 union
+export type CliEvent =
+  | { requestId: string; provider: ProviderType; phase: "started"; pid: number; timestamp: number }
+  | { requestId: string; provider: ProviderType; phase: "text"; text: string; timestamp: number }
+  | { requestId: string; provider: ProviderType; phase: "tool-use"; tool: CliToolUse; timestamp: number }
+  | { requestId: string; provider: ProviderType; phase: "tool-result"; toolResult: CliToolResult; timestamp: number }
+  | { requestId: string; provider: ProviderType; phase: "result"; result: CliSessionResult; timestamp: number }
+  | { requestId: string; provider: ProviderType; phase: "stderr"; chunk: string; timestamp: number }
+  | { requestId: string; provider: ProviderType; phase: "completed"; exitCode: number; signal: NodeJS.Signals | null; timestamp: number }
+  | { requestId: string; provider: ProviderType; phase: "failed"; error: string; timestamp: number }
+  | { requestId: string; provider: ProviderType; phase: "cancelled"; timestamp: number };
 
 // ─── Git Diff ───────────────────────────────────────────
 
@@ -176,16 +184,20 @@ export interface GitDiffResponse {
 
 // ─── App Settings ───────────────────────────────────────
 
-export type ClaudePermissionMode = "bypassPermissions" | "default";
+// 목적: provider 간 공통 권한 모드를 정의한다.
+// auto: 모든 도구 권한을 자동 승인 (Claude: bypassPermissions, Codex: never)
+// manual: 사용자 확인 후 실행 (Claude: default, Codex: on-request)
+export type CliPermissionMode = "auto" | "manual";
 
-export interface ClaudeSettings {
+export interface CliSettings {
   timeoutMs: number;
-  permissionMode: ClaudePermissionMode;
+  permissionMode: CliPermissionMode;
 }
 
 export interface AppSettings {
   defaultCwd: string;
-  claude: ClaudeSettings;
+  activeProvider: ProviderType;
+  cli: CliSettings;
 }
 
 // 목적: 부분 업데이트를 지원하기 위한 재귀적 Partial 타입
@@ -200,11 +212,11 @@ export interface AppSettingsUpdateRequest {
 // ─── Desktop API (preload → renderer) ───────────────────
 
 export interface AtlasDesktopApi {
-  runClaude(request: ClaudeRunRequest): Promise<ClaudeRunResponse>;
-  cancelClaude(request: ClaudeCancelRequest): Promise<ClaudeCancelResponse>;
-  getClaudeAuthStatus(request?: ClaudeAuthStatusRequest): Promise<ClaudeAuthStatusResponse>;
+  runCli(request: CliRunRequest): Promise<CliRunResponse>;
+  cancelCli(request: CliCancelRequest): Promise<CliCancelResponse>;
+  getCliAuthStatus(request: CliAuthCheckRequest): Promise<CliAuthStatusResponse>;
   getGitDiff(request: GitDiffRequest): Promise<GitDiffResponse>;
-  onClaudeEvent(listener: (event: ClaudeEvent) => void): () => void;
+  onCliEvent(listener: (event: CliEvent) => void): () => void;
   getConfig(): Promise<AppSettings>;
   updateConfig(request: AppSettingsUpdateRequest): Promise<AppSettings>;
 }

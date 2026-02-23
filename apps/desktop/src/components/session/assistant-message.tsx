@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { SessionStatus } from "@/hooks/use-claude-session";
+import type { SessionStatus } from "@/hooks/use-cli-session";
 
 interface AssistantMessageProps {
   text: string;
