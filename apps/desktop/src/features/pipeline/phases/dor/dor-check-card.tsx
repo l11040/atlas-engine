@@ -2,6 +2,7 @@
 
 import { Check, AlertCircle, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
 interface DorCheckResult {
@@ -21,17 +22,17 @@ function CheckRow({ check }: { check: DorCheckResult }) {
   const isPending = check.result === null;
 
   return (
-    <div className="flex flex-col gap-1.5 rounded-xs border border-border-subtle p-2.5">
+    <div className="-mx-2 rounded-md px-2 py-2">
       <div className="flex items-center gap-2">
         {isPassed && <Check className="h-3.5 w-3.5 text-status-success" />}
         {isHold && <AlertCircle className="h-3.5 w-3.5 text-status-warning" />}
         {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin text-text-soft" />}
-        <span className="text-2xs font-semibold text-text-strong">{check.label}</span>
+        <span className="text-xs font-semibold text-text-strong">{check.label}</span>
         {!isPending && (
           <Badge
             variant="outline"
             className={cn(
-              "ml-auto text-2xs",
+              "text-2xs",
               isPassed && "text-status-success",
               isHold && "text-status-warning"
             )}
@@ -41,7 +42,7 @@ function CheckRow({ check }: { check: DorCheckResult }) {
         )}
       </div>
       {check.reason && (
-        <p className="text-2xs leading-relaxed text-text-muted">{check.reason}</p>
+        <p className="mt-1 text-xs leading-[1.7] text-text-muted">{check.reason}</p>
       )}
     </div>
   );
@@ -49,12 +50,11 @@ function CheckRow({ check }: { check: DorCheckResult }) {
 
 export function DorCheckCard({ formal, semantic }: DorCheckCardProps) {
   return (
-    <div className="flex flex-col gap-3">
-      <span className="text-xs font-semibold text-text-strong">DoR 검증</span>
-      <div className="flex flex-col gap-2">
-        <CheckRow check={formal} />
-        <CheckRow check={semantic} />
-      </div>
+    <div className="flex flex-col gap-3 rounded-lg border border-border-subtle bg-surface-base px-5 py-4">
+      <h3 className="text-xs font-semibold text-text-strong">DoR 검증</h3>
+      <CheckRow check={formal} />
+      <Separator />
+      <CheckRow check={semantic} />
     </div>
   );
 }

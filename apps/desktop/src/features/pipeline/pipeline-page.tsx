@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Play, ScrollText, Zap } from "lucide-react";
+import { ArrowLeft, Play, RotateCcw, ScrollText, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PhasePipeline } from "./components/phase-pipeline";
@@ -133,6 +133,17 @@ export default function PipelinePage() {
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="text-2xs">{settings.ticket.mode}</Badge>
+              {!isRunning && hasPipeline && viewPhase !== "idle" && viewPhase !== "intake" && PHASE_TO_START_NODE[viewPhase === "hold" && holdAtPhase ? holdAtPhase : viewPhase] && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1 whitespace-nowrap text-xs"
+                  onClick={() => handleRerunFrom(viewPhase)}
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  재실행
+                </Button>
+              )}
               {hasPipeline && (
                 <Button
                   variant="outline"
@@ -168,27 +179,6 @@ export default function PipelinePage() {
         {error && (
           <div className="rounded-md border border-status-danger/30 bg-status-danger/10 px-3 py-2 text-xs text-status-danger">
             {error}
-          </div>
-        )}
-
-        {/* hold 사유 표시 */}
-        {isHold && phaseData.holdReason && viewPhase === "hold" && (
-          <div className="rounded-md border border-status-warning/30 bg-status-warning/10 px-3 py-2 text-xs text-status-warning">
-            보류 사유: {phaseData.holdReason}
-          </div>
-        )}
-
-        {/* 재실행 버튼 */}
-        {!isRunning && hasPipeline && viewPhase !== "idle" && viewPhase !== "intake" && PHASE_TO_START_NODE[viewPhase === "hold" && holdAtPhase ? holdAtPhase : viewPhase] && (
-          <div className="flex items-center justify-end gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 whitespace-nowrap text-xs"
-              onClick={() => handleRerunFrom(viewPhase)}
-            >
-              이 단계부터 재실행
-            </Button>
           </div>
         )}
 

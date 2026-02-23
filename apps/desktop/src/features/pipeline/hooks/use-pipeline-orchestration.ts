@@ -190,7 +190,9 @@ export function usePipelineOrchestration({
     return EMPTY_PHASE_DATA;
   }, [status, livePhaseData, settings, rerunFromPhase]);
 
-  // 목적: flow 노드 진행 상태를 PipelinePhase로 매핑한다.
+  // 목적: flow 진행 상태를 PipelinePhase로 매핑한다.
+  // 이유: graph.stream(updates)가 노드 완료 시에만 이벤트를 발행하므로,
+  //       노드 이벤트가 아닌 실시간 데이터(livePhaseData) 기반으로 phase를 결정한다.
   const currentPhase = useMemo((): PipelinePhase => {
     if (status === "idle") {
       return settings?.pipeline?.currentPhase ?? "idle";
@@ -209,11 +211,13 @@ export function usePipelineOrchestration({
       return "plan";
     }
 
-    const lastNode = [...nodes].reverse().find((n) => n.status === "running" || n.status === "completed");
-    // 목적: 재실행 시 노드 이벤트 도착 전까지 시작 phase를 표시한다.
-    if (!lastNode) return rerunFromPhase ?? "intake";
-    return NODE_PHASE_MAP[lastNode.nodeName] ?? "intake";
-  }, [status, nodes, result, settings, rerunFromPhase]);
+    // status === "running": 수집된 데이터 기반으로 가장 앞선 phase를 결정한다.
+    if (livePhaseData.holdReason) return "hold";
+    if (livePhaseData.todos.length > 0) return "plan";
+    if (livePhaseData.dorSemanticResult) return "plan";
+    if (livePhaseData.dorFormalResult) return "dor";
+    return rerunFromPhase ?? "intake";
+  }, [status, livePhaseData, result, settings, rerunFromPhase]);
 
   const holdAtPhase = useMemo((): PipelinePhase | undefined => {
     if (currentPhase !== "hold") return undefined;
