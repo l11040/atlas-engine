@@ -2,12 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Play, RotateCcw, ScrollText, Zap } from "lucide-react";
+import { ArrowLeft, Play, RotateCcw, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PhasePipeline } from "./components/phase-pipeline";
 import { PhaseContent } from "./components/phase-content";
-import { ActivityLogPanel } from "./components/activity-log-panel";
 import { useLangchainFlow } from "./hooks/use-langchain-flow";
 import { usePipelineOrchestration, PHASE_TO_START_NODE } from "./hooks/use-pipeline-orchestration";
 import type { AppSettings, PipelinePhase } from "@shared/ipc";
@@ -17,7 +16,6 @@ export default function PipelinePage() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedPhase, setSelectedPhase] = useState<PipelinePhase | null>(null);
-  const [isActivityLogOpen, setIsActivityLogOpen] = useState(false);
 
   const { status, nodes, result, error, invoke } = useLangchainFlow(
     settings?.activeProvider ?? "claude"
@@ -50,12 +48,6 @@ export default function PipelinePage() {
       setSelectedPhase(currentPhase);
     }
   }, [status]);
-
-  useEffect(() => {
-    if (status === "idle" && !settings?.pipeline) {
-      setIsActivityLogOpen(false);
-    }
-  }, [status, settings?.pipeline]);
 
   async function handleGenerateTodos() {
     if (!settings?.ticket) return;
@@ -144,17 +136,6 @@ export default function PipelinePage() {
                   재실행
                 </Button>
               )}
-              {hasPipeline && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 gap-1 whitespace-nowrap text-xs"
-                  onClick={() => setIsActivityLogOpen(true)}
-                >
-                  <ScrollText className="h-3 w-3" />
-                  로그
-                </Button>
-              )}
               {!hasPipeline && (
                 <Button size="sm" className="h-7 gap-1 text-xs" onClick={handleGenerateTodos}>
                   <Play className="h-3 w-3" />
@@ -186,14 +167,6 @@ export default function PipelinePage() {
         <PhaseContent viewPhase={viewPhase} phaseData={phaseData} ticket={settings.ticket} />
       </div>
 
-      {/* 활동 로그 Sheet */}
-      {hasPipeline && (
-        <ActivityLogPanel
-          open={isActivityLogOpen}
-          onOpenChange={setIsActivityLogOpen}
-          entries={phaseData.activityLog}
-        />
-      )}
     </>
   );
 }
