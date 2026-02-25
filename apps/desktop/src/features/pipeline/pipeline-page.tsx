@@ -7,68 +7,79 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PhasePipeline } from "./components/phase-pipeline";
 import { PhaseContent } from "./components/phase-content";
-import { useLangchainFlow } from "./hooks/use-langchain-flow";
-import { usePipelineOrchestration, PHASE_TO_START_NODE } from "./hooks/use-pipeline-orchestration";
+import { useFlowState, PHASE_TO_START_NODE } from "./hooks/use-flow-state";
 import type { AppSettings, PipelinePhase } from "@shared/ipc";
 
 export default function PipelinePage() {
   const navigate = useNavigate();
   const [settings, setSettings] = useState<AppSettings | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [settingsLoading, setSettingsLoading] = useState(true);
   const [selectedPhase, setSelectedPhase] = useState<PipelinePhase | null>(null);
 
-  const { status, nodes, result, error, invoke } = useLangchainFlow(
-    settings?.activeProvider ?? "claude"
-  );
-
-  const { phaseData, currentPhase, holdAtPhase, setRerunFromPhase } =
-    usePipelineOrchestration({ settings, setSettings, status, nodes, result });
+  const { flowState, phaseData, loading: flowLoading, invoke } =
+    useFlowState(settings);
 
   // 목적: 마운트 시 설정을 로드하고, 저장된 파이프라인 상태가 있으면 마지막 phase를 선택한다.
   useEffect(() => {
     window.atlas.getConfig().then((config) => {
       setSettings(config);
-      setLoading(false);
+      setSettingsLoading(false);
       if (config.pipeline) {
         setSelectedPhase(config.pipeline.currentPhase);
       }
     });
   }, []);
 
+  const currentPhase = flowState.currentPhase;
+  const holdAtPhase = flowState.holdAtPhase ?? null;
+  const isRunning = flowState.status === "running";
+  const isInterrupted = flowState.status === "interrupted";
+  const isError = flowState.status === "error";
+
   // 목적: 실행 중일 때 selectedPhase가 currentPhase를 자동 추적한다.
   useEffect(() => {
-    if (status === "running") {
+    if (isRunning) {
       setSelectedPhase(currentPhase);
     }
-  }, [currentPhase, status]);
+  }, [currentPhase, isRunning]);
 
   // 목적: flow 완료 시 selectedPhase를 최종 phase로 설정한다.
   useEffect(() => {
-    if (status === "completed" || (status === "error" && nodes.length > 0)) {
+    if (flowState.status === "completed" || (isError && flowState.nodeProgress.length > 0)) {
       setSelectedPhase(currentPhase);
     }
-  }, [status]);
+  }, [flowState.status]);
 
   async function handleGenerateTodos() {
     if (!settings?.ticket) return;
-    setRerunFromPhase(null);
     setSelectedPhase("intake");
-    await invoke("", settings.defaultCwd, settings.activeProvider, "ticket-to-todo");
+    await invoke({
+      flowId: crypto.randomUUID(),
+      flowType: "ticket-to-todo",
+      provider: settings.activeProvider,
+      prompt: "",
+      cwd: settings.defaultCwd
+    });
   }
 
   // 목적: 선택한 phase부터 파이프라인을 재실행한다.
   async function handleRerunFrom(phase: PipelinePhase) {
     if (!settings?.ticket) return;
-    // 목적: hold 상태에서 재실행 시 holdAtPhase 기준으로 시작 노드를 결정한다.
     const targetPhase = phase === "hold" && holdAtPhase ? holdAtPhase : phase;
     const startNode = PHASE_TO_START_NODE[targetPhase];
     if (!startNode) return;
-    setRerunFromPhase(targetPhase);
     setSelectedPhase(targetPhase);
-    await invoke("", settings.defaultCwd, settings.activeProvider, "ticket-to-todo", startNode);
+    await invoke({
+      flowId: crypto.randomUUID(),
+      flowType: "ticket-to-todo",
+      provider: settings.activeProvider,
+      prompt: "",
+      cwd: settings.defaultCwd,
+      startFromNode: startNode
+    });
   }
 
-  if (loading) {
+  if (settingsLoading || flowLoading) {
     return <div className="flex items-center justify-center py-16 text-xs text-text-soft">로딩 중...</div>;
   }
 
@@ -83,10 +94,9 @@ export default function PipelinePage() {
     );
   }
 
-  const isRunning = status === "running";
-  const isCompleted = status === "completed" || (status === "idle" && !!settings.pipeline);
+  const isCompleted = flowState.status === "completed" || (flowState.status === "idle" && !!settings.pipeline);
   const isHold = currentPhase === "hold";
-  const hasPipeline = status !== "idle" || !!settings.pipeline;
+  const hasPipeline = flowState.status !== "idle" || !!settings.pipeline;
   const viewPhase = selectedPhase ?? currentPhase;
 
   return (
@@ -119,8 +129,11 @@ export default function PipelinePage() {
               {isHold && (
                 <Badge variant="outline" className="text-2xs text-status-warning">hold</Badge>
               )}
-              {status === "error" && !isHold && (
+              {isError && !isHold && (
                 <Badge variant="outline" className="text-2xs text-status-danger">오류</Badge>
+              )}
+              {isInterrupted && (
+                <Badge variant="outline" className="text-2xs text-status-warning">중단됨</Badge>
               )}
             </div>
             <div className="flex items-center gap-2">
@@ -149,17 +162,24 @@ export default function PipelinePage() {
             <PhasePipeline
               currentPhase={currentPhase}
               selectedPhase={viewPhase !== "idle" ? viewPhase : undefined}
-              holdAtPhase={holdAtPhase}
+              holdAtPhase={holdAtPhase ?? undefined}
               isRunning={isRunning}
               onPhaseClick={setSelectedPhase}
             />
           )}
         </div>
 
+        {/* interrupted 경고 배너 */}
+        {isInterrupted && (
+          <div className="rounded-md border border-status-warning/30 bg-status-warning/10 px-3 py-2 text-xs text-status-warning">
+            앱이 비정상 종료되어 실행이 중단되었습니다. 부분 결과를 확인하거나 재실행하세요.
+          </div>
+        )}
+
         {/* 에러 표시 */}
-        {error && (
+        {flowState.error && (
           <div className="rounded-md border border-status-danger/30 bg-status-danger/10 px-3 py-2 text-xs text-status-danger">
-            {error}
+            {flowState.error}
           </div>
         )}
 

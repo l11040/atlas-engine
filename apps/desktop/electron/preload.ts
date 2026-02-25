@@ -12,9 +12,9 @@ import {
   type CliRunRequest,
   type CliRunResponse,
   type FlowCancelRequest,
-  type FlowEvent,
   type FlowInvokeRequest,
   type FlowInvokeResponse,
+  type FlowState,
   type GitDiffRequest,
   type GitDiffResponse
 } from "../shared/ipc";
@@ -55,16 +55,11 @@ const api: AtlasDesktopApi = {
   cancelFlow(request: FlowCancelRequest): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.flowCancel, request);
   },
-  onFlowEvent(listener: (event: FlowEvent) => void) {
-    const wrapped = (_event: Electron.IpcRendererEvent, payload: FlowEvent) => {
-      listener(payload);
-    };
-
-    ipcRenderer.on(IPC_CHANNELS.flowEvent, wrapped);
-
-    return () => {
-      ipcRenderer.removeListener(IPC_CHANNELS.flowEvent, wrapped);
-    };
+  getFlowState(): Promise<FlowState> {
+    return ipcRenderer.invoke(IPC_CHANNELS.flowGetState);
+  },
+  resetFlow(): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.flowReset);
   }
 };
 

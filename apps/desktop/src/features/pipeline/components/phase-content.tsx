@@ -3,7 +3,7 @@
 import { TicketCard } from "../phases/intake/ticket-card";
 import { DorCheckCard } from "../phases/dor/dor-check-card";
 import { TodoProgress } from "../phases/plan/todo-progress";
-import type { PhaseData } from "../hooks/use-pipeline-orchestration";
+import type { PhaseData } from "../hooks/use-flow-state";
 import type { PipelinePhase, Ticket } from "@shared/ipc";
 
 interface PhaseContentProps {
