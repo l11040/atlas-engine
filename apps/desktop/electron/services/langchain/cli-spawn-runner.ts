@@ -20,10 +20,16 @@ export interface CliSpawnOptions {
 // 목적: provider에 따라 CLI 실행 명령어와 인자를 결정한다.
 function buildCommand(options: CliSpawnOptions): { command: string; args: string[] } {
   if (options.provider === "claude") {
-    const permFlag = options.permissionMode === "auto" ? "bypassPermissions" : "default";
+    // 주의: --allowedTools ""로 도구 사용을 차단하여 파일 생성 등 side effect를 방지한다.
+    // 이유: CliLlm은 텍스트 응답만 필요하므로 agent 기능이 불필요하다.
     return {
       command: "claude",
-      args: ["-p", options.prompt, "--output-format", "stream-json", "--verbose", "--permission-mode", permFlag]
+      args: [
+        "-p", options.prompt,
+        "--output-format", "stream-json",
+        "--verbose",
+        "--allowedTools", ""
+      ]
     };
   }
 

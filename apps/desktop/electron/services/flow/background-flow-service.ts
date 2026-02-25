@@ -10,9 +10,11 @@ import type {
   PipelineState,
   TodoItem
 } from "../../../shared/ipc";
+import { awaitAllCallbacks } from "@langchain/core/callbacks/promises";
 import { getSettings, updateSettings } from "../config/settings";
 import { CliLlm } from "../langchain/cli-llm";
 import { buildTicketToTodoGraph } from "../langchain/graphs/ticket-to-todo";
+import { applyTracingEnv, clearTracingEnv } from "../langchain/tracing-env";
 import { FlowStateStore, INITIAL_FLOW_STATE } from "./flow-state-store";
 
 // 목적: 그래프 노드 이름을 PipelinePhase에 매핑한다.
@@ -54,13 +56,34 @@ export class BackgroundFlowService {
     const flowType = request.flowType || "prompt";
 
     // 목적: 상태를 초기화하고 실행을 시작한다.
-    await this.store.update({
+    const initialUpdate: Partial<FlowState> = {
       ...INITIAL_FLOW_STATE,
       flowId: request.flowId,
       flowType,
       status: "running",
       startedAt: Date.now()
-    });
+    };
+
+    // 목적: 재실행 시 스킵된 이전 단계의 결과를 즉시 보존한다.
+    // 이유: fire-and-forget 그래프 실행보다 먼저 반영해야 렌더러 첫 폴링에서 이전 결과가 보인다.
+    if (request.startFromNode) {
+      const settings = getSettings();
+      const saved = settings.pipeline;
+      if (saved) {
+        const node = request.startFromNode;
+        if (node === "dor_semantic" || node === "build_todos") {
+          initialUpdate.dorFormalResult = saved.dorFormalResult;
+          initialUpdate.dorFormalReason = saved.dorFormalReason ?? "";
+        }
+        if (node === "build_todos") {
+          initialUpdate.dorSemanticResult = saved.dorSemanticResult;
+          initialUpdate.dorSemanticReason = saved.dorSemanticReason ?? "";
+        }
+      }
+      initialUpdate.currentPhase = (NODE_PHASE_MAP[request.startFromNode] ?? "dor") as PipelinePhase;
+    }
+
+    await this.store.update(initialUpdate);
 
     this.abortController = new AbortController();
 
@@ -104,6 +127,8 @@ export class BackgroundFlowService {
   private async runTicketToTodoGraph(request: FlowInvokeRequest): Promise<void> {
     try {
       const settings = getSettings();
+      // 목적: LangSmith 추적이 활성화된 경우 환경 변수를 주입한다.
+      applyTracingEnv(settings.tracing);
       const ticket = settings.ticket;
 
       if (!ticket) {
@@ -141,19 +166,18 @@ export class BackgroundFlowService {
         }
       }
 
-      // 목적: 재실행 시 스킵된 이전 단계의 결과를 FlowState에 미리 반영한다.
-      if (startFromNode && settings.pipeline) {
-        const saved = settings.pipeline;
-        await this.store.update({
-          ...(saved.dorFormalResult && { dorFormalResult: saved.dorFormalResult }),
-          ...(saved.dorFormalReason && { dorFormalReason: saved.dorFormalReason }),
-          ...(saved.dorSemanticResult && { dorSemanticResult: saved.dorSemanticResult }),
-          ...(saved.dorSemanticReason && { dorSemanticReason: saved.dorSemanticReason }),
-          ...(startFromNode === "build_todos" && saved.todos?.length && { todos: saved.todos })
-        });
-      }
+      // 이유: 이전 단계 결과의 FlowState 반영은 startFlow()에서 이미 처리했으므로 여기서는 생략한다.
 
-      const stream = await graph.stream(initialState, { streamMode: "updates" });
+      // 목적: 추적 메타데이터(실행 이름, 태그)를 전달하여 LangSmith에서 식별 가능하게 한다.
+      const runName = ticket.jira_key
+        ? `ticket-to-todo:${ticket.jira_key}`
+        : "ticket-to-todo";
+
+      const stream = await graph.stream(initialState, {
+        streamMode: "updates",
+        runName,
+        tags: ["ticket-to-todo", request.provider]
+      });
 
       for await (const chunk of stream) {
         for (const [nodeName, update] of Object.entries(chunk)) {
@@ -188,6 +212,13 @@ export class BackgroundFlowService {
             partial.holdAtPhase = this.computeHoldAtPhase(nodeProgress);
           }
 
+          // 목적: dor_semantic 완료 후 build_todos 실행 전에 currentPhase를 "plan"으로 선행 반영한다.
+          // 이유: streamMode "updates"는 노드 완료 시에만 이벤트를 발생시킨다.
+          // build_todos 실행 중(완료 전) UI가 "dor"에 머무는 것을 방지한다.
+          if (nodeName === "dor_semantic" && typed.dorSemanticResult === "proceed") {
+            partial.currentPhase = "plan" as PipelinePhase;
+          }
+
           await this.store.update(partial);
         }
       }
@@ -207,6 +238,9 @@ export class BackgroundFlowService {
       await this.savePipelineToSettings();
     } finally {
       this.abortController = null;
+      // 목적: 비동기 트레이스 전송이 완료된 뒤 환경 변수를 제거한다.
+      await awaitAllCallbacks();
+      clearTracingEnv();
     }
   }
 
@@ -214,6 +248,7 @@ export class BackgroundFlowService {
   private async runPromptFlow(request: FlowInvokeRequest): Promise<void> {
     try {
       const settings = getSettings();
+      applyTracingEnv(settings.tracing);
 
       if (!request.prompt?.trim()) {
         await this.store.update({
@@ -250,6 +285,8 @@ export class BackgroundFlowService {
       });
     } finally {
       this.abortController = null;
+      await awaitAllCallbacks();
+      clearTracingEnv();
     }
   }
 

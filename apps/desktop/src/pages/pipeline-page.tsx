@@ -5,9 +5,9 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Play, RotateCcw, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { PhasePipeline } from "./components/phase-pipeline";
-import { PhaseContent } from "./components/phase-content";
-import { useFlowState, PHASE_TO_START_NODE } from "./hooks/use-flow-state";
+import { PhasePipeline } from "@/features/pipeline/components/phase-pipeline";
+import { PhaseContent } from "@/features/pipeline/components/phase-content";
+import { useFlowState, PHASE_TO_START_NODE } from "@/features/pipeline/hooks/use-flow-state";
 import type { AppSettings, PipelinePhase } from "@shared/ipc";
 
 export default function PipelinePage() {
@@ -184,7 +184,7 @@ export default function PipelinePage() {
         )}
 
         {/* Phase별 콘텐츠 */}
-        <PhaseContent viewPhase={viewPhase} phaseData={phaseData} ticket={settings.ticket} />
+        <PhaseContent viewPhase={viewPhase} phaseData={phaseData} ticket={settings.ticket} isRunning={isRunning} />
       </div>
 
     </>

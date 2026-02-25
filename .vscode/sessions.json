@@ -1,0 +1,38 @@
+{
+  "$schema": "https://cdn.statically.io/gh/nguyenngoclongdev/cdn/main/schema/v11/terminal-keeper.json",
+  "theme": "tribe",
+  "active": "default",
+  "activateOnStartup": true,
+  "keepExistingTerminals": false,
+  "sessions": {
+    "default": [
+      [
+        {
+          "name": "desktop-dev",
+          "autoExecuteCommands": true,
+          "icon": "server",
+          "color": "terminal.ansiBlue",
+          "commands": [
+            "pnpm --filter desktop dev"
+          ]
+        },
+        {
+          "name": "langgraph-studio",
+          "autoExecuteCommands": true,
+          "icon": "graph",
+          "color": "terminal.ansiMagenta",
+          "commands": [
+            "cd apps/desktop && pnpm studio"
+          ]
+        }
+      ],
+      {
+        "name": "commands",
+        "autoExecuteCommands": false,
+        "icon": "terminal",
+        "color": "terminal.ansiGreen",
+        "commands": []
+      }
+    ]
+  }
+}

@@ -31,18 +31,18 @@ apps/desktop/                      Electron desktop app (React + TypeScript + Ta
 └── src/                           렌더러 (React)
     ├── main.tsx                   렌더러 진입점
     ├── router.tsx                 react-router 라우트 정의
-    ├── pages/                     라우트별 페이지 컴포넌트
-    │   └── main-page.tsx
-    ├── features/                  기능별 모듈 (컴포넌트 + 훅 + 페이지)
+    ├── pages/                     라우트별 페이지 컴포넌트 (모든 페이지는 여기에 배치)
+    │   ├── main-page.tsx
+    │   ├── settings-page.tsx
+    │   └── pipeline-page.tsx
+    ├── features/                  기능별 모듈 (컴포넌트 + 훅)
     │   ├── pipeline/              Ticket → Todo 파이프라인
-    │   │   ├── pipeline-page.tsx  파이프라인 페이지
     │   │   ├── components/        파이프라인 UI 컴포넌트
     │   │   ├── hooks/             파이프라인 상태 관리 훅
     │   │   └── phases/            phase별 콘텐츠 (intake, dor, plan)
-    │   ├── session/               CLI 세션·인증 관련
-    │   │   ├── components/        세션 UI 컴포넌트
-    │   │   └── hooks/             CLI 인증·세션 훅
-    │   └── settings/              앱 설정 페이지
+    │   └── session/               CLI 세션·인증 관련
+    │       ├── components/        세션 UI 컴포넌트
+    │       └── hooks/             CLI 인증·세션 훅
     ├── components/ui/             shadcn/ui 컴포넌트 (수정 금지)
     ├── hooks/                     공유 커스텀 훅 (feature에 속하지 않는 것)
     └── lib/                       유틸리티 함수
@@ -67,10 +67,10 @@ packages/*                         Turborepo 공유 패키지 (예약)
 - LangGraph flow 엔진: `electron/services/langchain/*`
 
 ### 렌더러 (feature-based 구조)
-- 새 기능은 `src/features/<feature-name>/` 아래에 페이지·컴포넌트·훅을 함께 배치한다.
+- 라우트 페이지 컴포넌트는 반드시 `src/pages/`에 배치한다. feature 폴더에 페이지를 두지 않는다.
+- feature 폴더(`src/features/<feature-name>/`)에는 컴포넌트·훅만 배치한다.
 - feature 내부 구조: `components/`, `hooks/`, 필요 시 `phases/` 등 하위 폴더를 사용한다.
 - feature에 속하지 않는 공유 훅은 `src/hooks/`에 둔다.
-- 라우트 페이지 컴포넌트는 `src/pages/` 또는 해당 feature 폴더에 둔다.
 - feature 간 import는 `@/features/<name>/...` 절대 경로를 사용한다.
 
 ### IPC 계약

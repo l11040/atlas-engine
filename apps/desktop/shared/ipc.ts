@@ -212,10 +212,19 @@ export interface PipelineState {
   activityLog: ActivityLogEntry[];
 }
 
+// 목적: LangSmith 추적 설정을 정의한다.
+export interface TracingSettings {
+  enabled: boolean;
+  apiKey: string;
+  project: string;
+  endpoint: string;
+}
+
 export interface AppSettings {
   defaultCwd: string;
   activeProvider: ProviderType;
   cli: CliSettings;
+  tracing?: TracingSettings;
   ticket?: Ticket;
   todos?: TodoItem[];
   pipeline?: PipelineState;

@@ -4,18 +4,20 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAppSettings } from "@/hooks/use-app-settings";
 import { cn } from "@/lib/utils";
 import type { CliPermissionMode, ProviderType, Ticket } from "@shared/ipc";
 
-type SettingsTab = "general" | "cli" | "ticket";
+type SettingsTab = "general" | "cli" | "ticket" | "tracing";
 
 const TABS: { key: SettingsTab; label: string }[] = [
   { key: "general", label: "일반" },
   { key: "cli", label: "CLI" },
-  { key: "ticket", label: "티켓" }
+  { key: "ticket", label: "티켓" },
+  { key: "tracing", label: "추적" }
 ];
 
 // 목적: 티켓 탭에서 빈 상태일 때 보여줄 샘플 JSON
@@ -48,6 +50,11 @@ export default function SettingsPage() {
   const [ticketJson, setTicketJson] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [tracingEnabled, setTracingEnabled] = useState(false);
+  const [tracingApiKey, setTracingApiKey] = useState("");
+  const [tracingProject, setTracingProject] = useState("atlas-engine");
+  const [tracingEndpoint, setTracingEndpoint] = useState("https://api.smith.langchain.com");
+  const [apiKeyVisible, setApiKeyVisible] = useState(false);
 
   // 목적: 설정이 로드되면 폼 state에 동기화한다.
   useEffect(() => {
@@ -57,6 +64,12 @@ export default function SettingsPage() {
       setTimeoutSec(Math.round(settings.cli.timeoutMs / 1000));
       setPermissionMode(settings.cli.permissionMode);
       setTicketJson(settings.ticket ? JSON.stringify(settings.ticket, null, 2) : "");
+      if (settings.tracing) {
+        setTracingEnabled(settings.tracing.enabled);
+        setTracingApiKey(settings.tracing.apiKey);
+        setTracingProject(settings.tracing.project);
+        setTracingEndpoint(settings.tracing.endpoint);
+      }
     }
   }, [settings]);
 
@@ -70,6 +83,12 @@ export default function SettingsPage() {
         cli: {
           timeoutMs: timeoutSec * 1000,
           permissionMode
+        },
+        tracing: {
+          enabled: tracingEnabled,
+          apiKey: tracingApiKey,
+          project: tracingProject,
+          endpoint: tracingEndpoint
         }
       };
 
@@ -259,6 +278,87 @@ export default function SettingsPage() {
                     <br />
                     비워두면 티켓이 해제됩니다. Todo는 파이프라인 실행 시 자동 생성됩니다.
                   </p>
+                </div>
+              </>
+            )}
+
+            {activeTab === "tracing" && (
+              <>
+                <div className="flex items-center">
+                  <h2 className="text-xs font-semibold text-text-strong">추적</h2>
+                  <Button onClick={handleSave} disabled={saving} size="sm" className="ml-auto h-7 text-xs">
+                    {saving ? "저장 중..." : "저장"}
+                  </Button>
+                </div>
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center gap-3">
+                    <Label htmlFor="tracingEnabled" className="text-xs font-semibold text-text-muted">
+                      LangSmith 추적
+                    </Label>
+                    <Switch id="tracingEnabled" checked={tracingEnabled} onCheckedChange={setTracingEnabled} />
+                  </div>
+                  <p className="text-2xs text-text-soft">
+                    활성화하면 LangGraph 실행 추적이 LangSmith로 전송됩니다.
+                  </p>
+
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="tracingApiKey" className="text-xs font-semibold text-text-muted">
+                      API Key
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="tracingApiKey"
+                        type={apiKeyVisible ? "text" : "password"}
+                        value={tracingApiKey}
+                        onChange={(e) => setTracingApiKey(e.target.value)}
+                        placeholder="lsv2_pt_..."
+                        disabled={!tracingEnabled}
+                        className="h-8 border-border-subtle bg-surface-subtle pr-16 font-mono text-xs text-text-strong placeholder:text-text-soft"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setApiKeyVisible(!apiKeyVisible)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-2xs text-text-soft hover:text-text-muted"
+                      >
+                        {apiKeyVisible ? "숨기기" : "보기"}
+                      </button>
+                    </div>
+                    <p className="text-2xs text-text-soft">
+                      LangSmith API 키입니다. 비워두면 시스템 환경 변수(LANGCHAIN_API_KEY)를 사용합니다.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="tracingProject" className="text-xs font-semibold text-text-muted">
+                      프로젝트
+                    </Label>
+                    <Input
+                      id="tracingProject"
+                      value={tracingProject}
+                      onChange={(e) => setTracingProject(e.target.value)}
+                      placeholder="atlas-engine"
+                      disabled={!tracingEnabled}
+                      className="h-8 w-64 border-border-subtle bg-surface-subtle text-xs text-text-strong placeholder:text-text-soft"
+                    />
+                    <p className="text-2xs text-text-soft">LangSmith 프로젝트 이름입니다.</p>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="tracingEndpoint" className="text-xs font-semibold text-text-muted">
+                      엔드포인트
+                    </Label>
+                    <Input
+                      id="tracingEndpoint"
+                      value={tracingEndpoint}
+                      onChange={(e) => setTracingEndpoint(e.target.value)}
+                      placeholder="https://api.smith.langchain.com"
+                      disabled={!tracingEnabled}
+                      className="h-8 border-border-subtle bg-surface-subtle text-xs text-text-strong placeholder:text-text-soft"
+                    />
+                    <p className="text-2xs text-text-soft">
+                      자체 호스팅(Self-hosted) LangSmith를 사용하는 경우에만 변경하세요.
+                    </p>
+                  </div>
                 </div>
               </>
             )}

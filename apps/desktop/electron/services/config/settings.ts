@@ -12,6 +12,12 @@ const DEFAULT_SETTINGS: AppSettings = {
   cli: {
     timeoutMs: 300_000,
     permissionMode: "auto"
+  },
+  tracing: {
+    enabled: false,
+    apiKey: "",
+    project: "atlas-engine",
+    endpoint: "https://api.smith.langchain.com"
   }
 };
 

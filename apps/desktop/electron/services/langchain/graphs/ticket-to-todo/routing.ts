@@ -1,4 +1,4 @@
-// 책임: Ticket → Todo 서브그래프의 조건부 라우팅을 정의한다.
+// 책임: Ticket → Todo 그래프의 조건부 라우팅을 정의한다.
 
 import type { TicketToTodoState } from "./state";
 

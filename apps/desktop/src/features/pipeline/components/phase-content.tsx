@@ -1,5 +1,6 @@
 // 책임: 선택된 phase에 해당하는 콘텐츠를 렌더링한다.
 
+import { Loader2 } from "lucide-react";
 import { TicketCard } from "../phases/intake/ticket-card";
 import { DorCheckCard } from "../phases/dor/dor-check-card";
 import { TodoProgress } from "../phases/plan/todo-progress";
@@ -10,9 +11,20 @@ interface PhaseContentProps {
   viewPhase: PipelinePhase;
   phaseData: PhaseData;
   ticket: Ticket;
+  isRunning: boolean;
 }
 
-export function PhaseContent({ viewPhase, phaseData, ticket }: PhaseContentProps) {
+// 목적: 실행 중인 phase에 로딩 표시를 보여준다.
+function RunningBanner() {
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-brand-500/20 bg-brand-50 px-4 py-3">
+      <Loader2 className="h-3.5 w-3.5 animate-spin text-brand-500" />
+      <span className="text-xs font-medium text-brand-600">실행 중...</span>
+    </div>
+  );
+}
+
+export function PhaseContent({ viewPhase, phaseData, ticket, isRunning }: PhaseContentProps) {
   if (viewPhase === "idle" || viewPhase === "intake") {
     return <TicketCard ticket={ticket} />;
   }
@@ -27,6 +39,10 @@ export function PhaseContent({ viewPhase, phaseData, ticket }: PhaseContentProps
   }
 
   if (viewPhase === "plan") {
+    // 목적: 재실행 시 todo가 아직 없으면 실행 중 표시를 보여준다.
+    if (isRunning && phaseData.todos.length === 0) {
+      return <RunningBanner />;
+    }
     return <TodoProgress todos={phaseData.todos} ticket={ticket} />;
   }
 

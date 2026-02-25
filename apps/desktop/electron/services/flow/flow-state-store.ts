@@ -72,6 +72,7 @@ const FIELD_TO_FILE: Record<keyof FlowState, FlowFile> = {
 
 // ─── 초기 상태 ──────────────────────────────────────────
 
+// 주의: optional 필드도 명시적으로 포함해야 store.update() spread 시 이전 값이 초기화된다.
 export const INITIAL_FLOW_STATE: FlowState = {
   flowId: null,
   flowType: null,
@@ -81,6 +82,11 @@ export const INITIAL_FLOW_STATE: FlowState = {
   error: null,
   nodeProgress: [],
   currentPhase: "idle",
+  holdAtPhase: undefined,
+  dorFormalResult: undefined,
+  dorFormalReason: undefined,
+  dorSemanticResult: undefined,
+  dorSemanticReason: undefined,
   todos: [],
   holdReason: "",
   activityLog: []

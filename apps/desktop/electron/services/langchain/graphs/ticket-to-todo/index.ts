@@ -1,6 +1,7 @@
-// 책임: Ticket → Todo 서브그래프를 조립하고 컴파일한다.
+// 책임: Ticket → Todo 그래프를 조립하고 컴파일한다 (런타임용 flat 구조).
+// 이유: flat 구조여야 각 노드가 즉시 emit되어 UI에서 실시간 phase 추적이 가능하다.
 
-import { StateGraph, END } from "@langchain/langgraph";
+import { END, StateGraph } from "@langchain/langgraph";
 import type { CliLlm } from "../../cli-llm";
 import { dorFormalNode } from "./nodes/dor-formal";
 import { createDorSemanticNode } from "./nodes/dor-semantic";
@@ -13,7 +14,7 @@ import { TicketToTodoAnnotation } from "./state";
 export type { TicketToTodoState } from "./state";
 
 // 목적: startFromNode에 따라 진입점이 다른 그래프를 빌드한다.
-// 이유: 전체 재실행 없이 특정 단계부터 재실행하여 LLM 호출 비용을 절약한다.
+// 이유: 전체 재실행 없이 특정 노드부터 재실행하여 LLM 호출 비용을 절약한다.
 export function buildTicketToTodoGraph(llm: CliLlm, startFromNode?: string) {
   const graph = new StateGraph(TicketToTodoAnnotation)
     .addNode("dor_formal", dorFormalNode)
