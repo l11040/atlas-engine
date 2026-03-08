@@ -17,7 +17,11 @@ export const IPC_CHANNELS = {
   todoFlowGetAllStates: "todo-flow:get-all-states",
   gitDiff: "git:diff",
   configGet: "config:get",
-  configUpdate: "config:update"
+  configUpdate: "config:update",
+  jiraTestConnection: "jira:test-connection",
+  jiraFetchTicketTree: "jira:fetch-ticket-tree",
+  jiraGetTicketTree: "jira:get-ticket-tree",
+  jiraProgress: "jira:progress"
 } as const;
 
 // ─── Provider ──────────────────────────────────────
@@ -257,11 +261,21 @@ export interface TracingSettings {
   endpoint: string;
 }
 
+// 목적: Jira REST API 연결 설정을 정의한다.
+export interface JiraSettings {
+  baseUrl: string;
+  email: string;
+  apiToken: string;
+  /** 목적: 프로젝트 키 프리픽스. 설정하면 숫자만 입력해도 자동으로 붙인다. (예: "GRID") */
+  projectPrefix: string;
+}
+
 export interface AppSettings {
   defaultCwd: string;
   activeProvider: ProviderType;
   cli: CliSettings;
   tracing?: TracingSettings;
+  jira?: JiraSettings;
   ticket?: Ticket;
   todos?: TodoItem[];
   pipeline?: PipelineState;
@@ -548,6 +562,73 @@ export interface ImplReport {
   diff?: GitDiffResponse | null;
 }
 
+// ─── Jira Ticket (API 응답 정규화) ──────────────────────────
+// 목적: Jira REST API에서 가져온 이슈를 정규화한 타입을 정의한다.
+// 계층: Epic → Story → Subtask, links로 관계 표현
+
+export interface JiraTicketLink {
+  type: "Blocks" | "Relates" | string;
+  direction: "inward" | "outward";
+  key: string;
+}
+
+export interface JiraTicket {
+  key: string;
+  summary: string;
+  status: string;
+  issuetype: string;
+  priority: string;
+  assignee: string | null;
+  reporter: string | null;
+  created: string;
+  updated: string;
+  parent: string | null;
+  subtasks: string[];
+  links: JiraTicketLink[];
+  labels: string[];
+  description: string | null;
+}
+
+export interface JiraTicketTree {
+  root: string;
+  exportedAt: string;
+  total: number;
+  tickets: Record<string, JiraTicket>;
+}
+
+// ─── Jira IPC ─────────────────────────────────────────────
+// 렌더러 → 메인: Jira 연결 테스트 및 티켓 트리 조회
+
+export interface JiraTestConnectionRequest {
+  baseUrl: string;
+  email: string;
+  apiToken: string;
+}
+
+export interface JiraTestConnectionResponse {
+  success: boolean;
+  message: string;
+  displayName?: string;
+}
+
+export interface JiraFetchTicketTreeRequest {
+  ticketKey: string;
+}
+
+export interface JiraFetchTicketTreeResponse {
+  success: boolean;
+  message: string;
+  tree?: JiraTicketTree;
+}
+
+// ─── Jira Progress Event ─────────────────────────────────
+// 메인 → 렌더러: 티켓 트리 수집 진행 상태 push
+export type JiraProgressEvent =
+  | { phase: "fetching"; key: string; collected: number }
+  | { phase: "searching-children"; key: string; collected: number }
+  | { phase: "completed"; total: number }
+  | { phase: "error"; message: string };
+
 // ─── Desktop API (preload → renderer) ───────────────────
 
 export interface AtlasDesktopApi {
@@ -567,4 +648,8 @@ export interface AtlasDesktopApi {
   getAllTodoFlowStates(): Promise<TodoFlowAllStatesResponse>;
   getConfig(): Promise<AppSettings>;
   updateConfig(request: AppSettingsUpdateRequest): Promise<AppSettings>;
+  testJiraConnection(request: JiraTestConnectionRequest): Promise<JiraTestConnectionResponse>;
+  fetchJiraTicketTree(request: JiraFetchTicketTreeRequest): Promise<JiraFetchTicketTreeResponse>;
+  getJiraTicketTree(): Promise<JiraTicketTree | null>;
+  onJiraProgress(listener: (event: JiraProgressEvent) => void): () => void;
 }

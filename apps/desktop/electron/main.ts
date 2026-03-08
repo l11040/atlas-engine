@@ -2,6 +2,7 @@ import { app, BrowserWindow } from "electron";
 import { registerCliIpc } from "./ipc/register-cli-ipc";
 import { registerConfigIpc } from "./ipc/register-config-ipc";
 import { registerFlowIpc } from "./ipc/register-flow-ipc";
+import { registerJiraIpc } from "./ipc/register-jira-ipc";
 import { registerTodoFlowIpc } from "./ipc/register-todo-flow-ipc";
 import { loadSettings } from "./services/config/settings";
 import { BackgroundFlowService } from "./services/flow/background-flow-service";
@@ -33,6 +34,7 @@ app.whenReady().then(async () => {
 
   registerConfigIpc();
   registerCliIpc();
+  registerJiraIpc();
   registerFlowIpc(flowService);
   registerTodoFlowIpc(todoFlowService);
   createMainWindow();

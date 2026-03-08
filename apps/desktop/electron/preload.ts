@@ -17,6 +17,12 @@ import {
   type FlowState,
   type GitDiffRequest,
   type GitDiffResponse,
+  type JiraFetchTicketTreeRequest,
+  type JiraFetchTicketTreeResponse,
+  type JiraProgressEvent,
+  type JiraTestConnectionRequest,
+  type JiraTestConnectionResponse,
+  type JiraTicketTree,
   type TodoFlowAllStatesResponse,
   type TodoFlowBackendState,
   type TodoFlowExecuteAllRequest,
@@ -80,6 +86,24 @@ const api: AtlasDesktopApi = {
   },
   getAllTodoFlowStates(): Promise<TodoFlowAllStatesResponse> {
     return ipcRenderer.invoke(IPC_CHANNELS.todoFlowGetAllStates);
+  },
+  testJiraConnection(request: JiraTestConnectionRequest): Promise<JiraTestConnectionResponse> {
+    return ipcRenderer.invoke(IPC_CHANNELS.jiraTestConnection, request);
+  },
+  fetchJiraTicketTree(request: JiraFetchTicketTreeRequest): Promise<JiraFetchTicketTreeResponse> {
+    return ipcRenderer.invoke(IPC_CHANNELS.jiraFetchTicketTree, request);
+  },
+  getJiraTicketTree(): Promise<JiraTicketTree | null> {
+    return ipcRenderer.invoke(IPC_CHANNELS.jiraGetTicketTree);
+  },
+  onJiraProgress(listener: (event: JiraProgressEvent) => void) {
+    const wrapped = (_event: Electron.IpcRendererEvent, payload: JiraProgressEvent) => {
+      listener(payload);
+    };
+    ipcRenderer.on(IPC_CHANNELS.jiraProgress, wrapped);
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.jiraProgress, wrapped);
+    };
   }
 };
 

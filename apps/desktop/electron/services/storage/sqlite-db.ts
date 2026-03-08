@@ -60,6 +60,12 @@ function ensureSchema(database: NodeDatabaseSync): void {
 
     CREATE INDEX IF NOT EXISTS idx_todo_flow_activity_todo_id
     ON todo_flow_activity (todo_id, id);
+
+    CREATE TABLE IF NOT EXISTS jira_ticket_tree (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      data BLOB NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
   `);
 }
 
