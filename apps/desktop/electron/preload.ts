@@ -11,10 +11,6 @@ import {
   type CliEvent,
   type CliRunRequest,
   type CliRunResponse,
-  type FlowCancelRequest,
-  type FlowInvokeRequest,
-  type FlowInvokeResponse,
-  type FlowState,
   type GitDiffRequest,
   type GitDiffResponse,
   type JiraFetchTicketTreeRequest,
@@ -23,11 +19,12 @@ import {
   type JiraTestConnectionRequest,
   type JiraTestConnectionResponse,
   type JiraTicketTree,
-  type TodoFlowAllStatesResponse,
-  type TodoFlowBackendState,
-  type TodoFlowExecuteAllRequest,
-  type TodoFlowStartRequest,
-  type TodoFlowStartResponse
+  type RunCancelRequest,
+  type RunStartRequest,
+  type RunStartResponse,
+  type RunState,
+  type TaskApprovalRequest,
+  type TaskExecutionState
 } from "../shared/ipc";
 
 const api: AtlasDesktopApi = {
@@ -43,58 +40,59 @@ const api: AtlasDesktopApi = {
   getGitDiff(request: GitDiffRequest): Promise<GitDiffResponse> {
     return ipcRenderer.invoke(IPC_CHANNELS.gitDiff, request);
   },
+  onCliEvent(listener: (event: CliEvent) => void) {
+    const wrapped = (_event: Electron.IpcRendererEvent, payload: CliEvent) => {
+      listener(payload);
+    };
+    ipcRenderer.on(IPC_CHANNELS.cliEvent, wrapped);
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.cliEvent, wrapped);
+    };
+  },
+  // 자동화 파이프라인
+  startRun(request: RunStartRequest): Promise<RunStartResponse> {
+    return ipcRenderer.invoke(IPC_CHANNELS.runStart, request);
+  },
+  cancelRun(request: RunCancelRequest): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.runCancel, request);
+  },
+  getRunState(): Promise<RunState | null> {
+    return ipcRenderer.invoke(IPC_CHANNELS.runGetState);
+  },
+  resetRun(): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.runReset);
+  },
+  getTaskState(taskId: string): Promise<TaskExecutionState | null> {
+    return ipcRenderer.invoke(IPC_CHANNELS.taskGetState, taskId);
+  },
+  getAllTaskStates(): Promise<Record<string, TaskExecutionState>> {
+    return ipcRenderer.invoke(IPC_CHANNELS.taskGetAllStates);
+  },
+  cancelTask(taskId: string): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.taskCancel, taskId);
+  },
+  approveTask(request: TaskApprovalRequest): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.taskApprove, request);
+  },
+  // 설정
   getConfig(): Promise<AppSettings> {
     return ipcRenderer.invoke(IPC_CHANNELS.configGet);
   },
   updateConfig(request: AppSettingsUpdateRequest): Promise<AppSettings> {
     return ipcRenderer.invoke(IPC_CHANNELS.configUpdate, request);
   },
-  onCliEvent(listener: (event: CliEvent) => void) {
-    const wrapped = (_event: Electron.IpcRendererEvent, payload: CliEvent) => {
-      listener(payload);
-    };
-
-    ipcRenderer.on(IPC_CHANNELS.cliEvent, wrapped);
-
-    return () => {
-      ipcRenderer.removeListener(IPC_CHANNELS.cliEvent, wrapped);
-    };
-  },
-  invokeFlow(request: FlowInvokeRequest): Promise<FlowInvokeResponse> {
-    return ipcRenderer.invoke(IPC_CHANNELS.flowInvoke, request);
-  },
-  cancelFlow(request: FlowCancelRequest): Promise<void> {
-    return ipcRenderer.invoke(IPC_CHANNELS.flowCancel, request);
-  },
-  getFlowState(): Promise<FlowState> {
-    return ipcRenderer.invoke(IPC_CHANNELS.flowGetState);
-  },
-  resetFlow(): Promise<void> {
-    return ipcRenderer.invoke(IPC_CHANNELS.flowReset);
-  },
-  startTodoFlow(request: TodoFlowStartRequest): Promise<TodoFlowStartResponse> {
-    return ipcRenderer.invoke(IPC_CHANNELS.todoFlowStart, request);
-  },
-  getTodoFlowState(todoId: string): Promise<TodoFlowBackendState | null> {
-    return ipcRenderer.invoke(IPC_CHANNELS.todoFlowGetState, todoId);
-  },
-  cancelTodoFlow(todoId: string): Promise<void> {
-    return ipcRenderer.invoke(IPC_CHANNELS.todoFlowCancel, todoId);
-  },
-  executeAllTodoFlows(request: TodoFlowExecuteAllRequest): Promise<{ status: string }> {
-    return ipcRenderer.invoke(IPC_CHANNELS.todoFlowExecuteAll, request);
-  },
-  getAllTodoFlowStates(): Promise<TodoFlowAllStatesResponse> {
-    return ipcRenderer.invoke(IPC_CHANNELS.todoFlowGetAllStates);
-  },
+  // Jira
   testJiraConnection(request: JiraTestConnectionRequest): Promise<JiraTestConnectionResponse> {
     return ipcRenderer.invoke(IPC_CHANNELS.jiraTestConnection, request);
   },
   fetchJiraTicketTree(request: JiraFetchTicketTreeRequest): Promise<JiraFetchTicketTreeResponse> {
     return ipcRenderer.invoke(IPC_CHANNELS.jiraFetchTicketTree, request);
   },
-  getJiraTicketTree(): Promise<JiraTicketTree | null> {
-    return ipcRenderer.invoke(IPC_CHANNELS.jiraGetTicketTree);
+  getJiraTicketTree(rootKey: string): Promise<JiraTicketTree | null> {
+    return ipcRenderer.invoke(IPC_CHANNELS.jiraGetTicketTree, rootKey);
+  },
+  getAllJiraTicketTrees(): Promise<JiraTicketTree[]> {
+    return ipcRenderer.invoke(IPC_CHANNELS.jiraGetAllTicketTrees);
   },
   onJiraProgress(listener: (event: JiraProgressEvent) => void) {
     const wrapped = (_event: Electron.IpcRendererEvent, payload: JiraProgressEvent) => {

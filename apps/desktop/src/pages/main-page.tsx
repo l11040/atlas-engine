@@ -1,11 +1,37 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, Search, Settings } from "lucide-react";
+import { ChevronRight, Loader2, Search, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { AuthStatusCard } from "@/features/session/components/auth-status-card";
-import { JiraTicketTreeView } from "@/features/jira/components/jira-ticket-tree";
-import { JiraTicketDetail } from "@/features/jira/components/jira-ticket-detail";
-import type { AppSettings, JiraTicketTree } from "@shared/ipc";
+import { Badge } from "@/components/ui/badge";
+import type { AppSettings, JiraTicket, JiraTicketTree } from "@shared/ipc";
+
+// 목적: issuetype에 따른 배지 스타일을 결정한다.
+function issueTypeBadge(issuetype: string): { label: string; className: string } {
+  const lower = issuetype.toLowerCase();
+  if (lower === "에픽" || lower === "epic") return { label: "Epic", className: "bg-violet-100 text-violet-600 border-violet-200" };
+  if (lower === "스토리" || lower === "story") return { label: "Story", className: "bg-emerald-100 text-emerald-600 border-emerald-200" };
+  if (lower.includes("sub-task") || lower === "하위 작업") return { label: "Task", className: "bg-sky-100 text-sky-600 border-sky-200" };
+  return { label: issuetype, className: "bg-neutral-100 text-neutral-500 border-neutral-200" };
+}
+
+function TicketRow({ ticket, onClick }: { ticket: JiraTicket; onClick: () => void }) {
+  const badge = issueTypeBadge(ticket.issuetype);
+  return (
+    <button
+      type="button"
+      className="flex items-center gap-3 rounded-md px-3 py-2.5 text-left transition-colors hover:bg-surface-subtle"
+      onClick={onClick}
+    >
+      <Badge variant="outline" className={`shrink-0 text-[10px] px-1.5 py-0 ${badge.className}`}>
+        {badge.label}
+      </Badge>
+      <span className="shrink-0 text-2xs text-text-muted">{ticket.key}</span>
+      <span className="min-w-0 flex-1 truncate text-xs text-text-strong">{ticket.summary}</span>
+      <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0">{ticket.status}</Badge>
+      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-text-soft" />
+    </button>
+  );
+}
 
 export default function MainPage() {
   const navigate = useNavigate();
@@ -13,22 +39,16 @@ export default function MainPage() {
   const [ticketKey, setTicketKey] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tree, setTree] = useState<JiraTicketTree | null>(null);
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [trees, setTrees] = useState<JiraTicketTree[]>([]);
 
-  // 목적: 앱 설정과 저장된 티켓 트리를 복원한다.
   useEffect(() => {
     window.atlas.getConfig().then(setSettings);
-    window.atlas.getJiraTicketTree().then((saved) => {
-      if (saved) setTree(saved);
-    });
+    window.atlas.getAllJiraTicketTrees().then(setTrees);
   }, []);
 
   const jiraConfigured = Boolean(settings?.jira?.baseUrl && settings?.jira?.email && settings?.jira?.apiToken);
   const prefix = settings?.jira?.projectPrefix ?? "";
-  const selectedTicket = tree && selectedKey ? tree.tickets[selectedKey] ?? null : null;
 
-  // 목적: 숫자만 입력된 경우 프로젝트 프리픽스를 자동으로 붙인다.
   function resolveTicketKey(input: string): string {
     const trimmed = input.trim().toUpperCase();
     if (!trimmed) return "";
@@ -42,11 +62,10 @@ export default function MainPage() {
 
     setLoading(true);
     setError(null);
-    setSelectedKey(null);
     try {
       const result = await window.atlas.fetchJiraTicketTree({ ticketKey: key });
       if (result.success && result.tree) {
-        setTree(result.tree);
+        navigate(`/ticket/${result.tree.root}`);
       } else {
         setError(result.message);
       }
@@ -57,17 +76,13 @@ export default function MainPage() {
     }
   }
 
+  // 목적: 각 트리의 루트 티켓만 리스트로 표시한다.
+  const rootTickets: JiraTicket[] = trees
+    .map((t) => t.tickets[t.root])
+    .filter((t): t is JiraTicket => t != null);
+
   return (
     <>
-      <header className="flex items-center justify-end gap-2">
-        <AuthStatusCard />
-        <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => navigate("/settings")}>
-          <Settings className="h-3.5 w-3.5" />
-          설정
-        </Button>
-      </header>
-
-      {/* 목적: Jira 설정이 없으면 설정 유도, 있으면 티켓 키 입력 표시 */}
       {!jiraConfigured ? (
         <div className="flex flex-col items-center justify-center gap-3 rounded-md border border-dashed border-border-subtle py-12">
           <p className="text-xs text-text-muted">Jira 연결이 설정되지 않았습니다</p>
@@ -79,9 +94,9 @@ export default function MainPage() {
       ) : (
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-64 items-center overflow-hidden rounded-md border border-border-subtle bg-surface-subtle">
+            <div className="flex h-9 w-64 items-center overflow-hidden rounded-md border border-border-subtle bg-surface-subtle">
               {prefix && (
-                <span className="flex h-full shrink-0 items-center border-r border-border-subtle bg-neutral-100 px-2 text-xs font-medium text-text-muted">
+                <span className="flex h-full shrink-0 items-center border-r border-border-subtle bg-neutral-100 px-2.5 text-xs font-medium text-text-muted">
                   {prefix}-
                 </span>
               )}
@@ -90,10 +105,10 @@ export default function MainPage() {
                 onChange={(e) => setTicketKey(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleFetchTicket()}
                 placeholder={prefix ? "번호 입력" : "티켓 키 (예: PROJ-123)"}
-                className="h-full w-full bg-transparent px-2 text-xs text-text-strong placeholder:text-text-soft focus:outline-none"
+                className="h-full w-full bg-transparent px-2.5 text-xs text-text-strong placeholder:text-text-soft focus:outline-none"
               />
             </div>
-            <Button onClick={handleFetchTicket} disabled={loading || !ticketKey.trim()} size="sm" className="h-8 gap-1.5 text-xs">
+            <Button onClick={handleFetchTicket} disabled={loading || !ticketKey.trim()} size="sm" className="h-9 gap-1.5 text-xs">
               {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
               조회
             </Button>
@@ -105,27 +120,27 @@ export default function MainPage() {
             </div>
           )}
 
-          {tree && (
-            <>
-              <div className="flex items-center justify-between">
-                <span className="text-2xs text-text-soft">{tree.total}개 이슈</span>
-                <span className="text-2xs text-text-soft">{new Date(tree.exportedAt).toLocaleString("ko-KR")}</span>
+          {rootTickets.length > 0 && (
+            <div className="flex flex-col">
+              <div className="px-3 pb-2">
+                <span className="text-2xs font-medium text-text-soft">{rootTickets.length}개 티켓</span>
               </div>
-              <div className="flex min-h-0 flex-1 gap-4">
-                <div className="w-2/5 shrink-0 overflow-auto">
-                  <JiraTicketTreeView tree={tree} selectedKey={selectedKey} onSelect={setSelectedKey} />
-                </div>
-              <div className="flex-1 overflow-auto">
-                {selectedTicket ? (
-                  <JiraTicketDetail ticket={selectedTicket} />
-                ) : (
-                  <div className="flex h-full items-center justify-center rounded-md border border-dashed border-border-subtle">
-                    <p className="text-xs text-text-soft">티켓을 선택하세요</p>
-                  </div>
-                )}
+              <div className="flex flex-col rounded-md border border-border-subtle divide-y divide-border-subtle">
+                {rootTickets.map((ticket) => (
+                  <TicketRow
+                    key={ticket.key}
+                    ticket={ticket}
+                    onClick={() => navigate(`/ticket/${ticket.key}`)}
+                  />
+                ))}
               </div>
             </div>
-            </>
+          )}
+
+          {rootTickets.length === 0 && !loading && (
+            <div className="flex items-center justify-center py-12">
+              <p className="text-xs text-text-soft">티켓 키를 입력하여 조회하세요</p>
+            </div>
           )}
         </div>
       )}

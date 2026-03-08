@@ -10,7 +10,7 @@ import {
 } from "../../shared/ipc";
 import { getSettings } from "../services/config/settings";
 import { testConnection, fetchTicketTree } from "../services/jira/jira-client";
-import { saveTicketTree, loadTicketTree } from "../services/jira/jira-ticket-store";
+import { saveTicketTree, loadTicketTree, loadAllTicketTrees } from "../services/jira/jira-ticket-store";
 
 export function registerJiraIpc(): void {
   // 목적: 전달받은 자격증명으로 Jira 연결 테스트를 수행한다.
@@ -26,8 +26,11 @@ export function registerJiraIpc(): void {
     }
   );
 
-  // 목적: SQLite에서 저장된 티켓 트리를 반환한다.
-  ipcMain.handle(IPC_CHANNELS.jiraGetTicketTree, () => loadTicketTree());
+  // 목적: SQLite에서 특정 루트 키의 티켓 트리를 반환한다.
+  ipcMain.handle(IPC_CHANNELS.jiraGetTicketTree, (_event, rootKey: string) => loadTicketTree(rootKey));
+
+  // 목적: 저장된 모든 티켓 트리를 반환한다.
+  ipcMain.handle(IPC_CHANNELS.jiraGetAllTicketTrees, () => loadAllTicketTrees());
 
   // 목적: 저장된 Jira 설정으로 티켓 트리를 조회하고, 결과를 SQLite에 저장한다.
   ipcMain.handle(

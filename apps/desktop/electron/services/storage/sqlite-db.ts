@@ -38,33 +38,44 @@ function ensureSchema(database: NodeDatabaseSync): void {
       data BLOB NOT NULL,
       updated_at INTEGER NOT NULL
     );
+  `);
 
-    CREATE TABLE IF NOT EXISTS flow_state (
-      id INTEGER PRIMARY KEY CHECK (id = 1),
-      data BLOB NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
+  // 목적: 기존 싱글턴 테이블(id INTEGER)을 다중 저장(root_key TEXT)으로 마이그레이션한다.
+  // 이유: CREATE TABLE IF NOT EXISTS는 스키마가 다른 기존 테이블을 무시하므로, 컬럼 존재 여부로 판별한다.
+  const cols = database.prepare("PRAGMA table_info(jira_ticket_tree)").all() as Array<{ name: string }>;
+  if (cols.length > 0 && !cols.some((c) => c.name === "root_key")) {
+    database.exec("DROP TABLE jira_ticket_tree");
+  }
 
-    CREATE TABLE IF NOT EXISTS todo_flow_states (
-      todo_id TEXT PRIMARY KEY,
-      data BLOB NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS todo_flow_activity (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      todo_id TEXT NOT NULL,
-      entry BLOB NOT NULL,
-      created_at INTEGER NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_todo_flow_activity_todo_id
-    ON todo_flow_activity (todo_id, id);
-
+  database.exec(`
     CREATE TABLE IF NOT EXISTS jira_ticket_tree (
-      id INTEGER PRIMARY KEY CHECK (id = 1),
+      root_key TEXT PRIMARY KEY,
       data BLOB NOT NULL,
       updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS runs (
+      run_id TEXT PRIMARY KEY,
+      ticket_id TEXT NOT NULL,
+      data BLOB NOT NULL,
+      status TEXT NOT NULL DEFAULT 'idle',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS task_executions (
+      task_id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL REFERENCES runs(run_id),
+      data BLOB NOT NULL,
+      status TEXT NOT NULL DEFAULT 'idle',
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS execution_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id TEXT NOT NULL,
+      data BLOB NOT NULL,
+      archived_at INTEGER NOT NULL
     );
   `);
 }

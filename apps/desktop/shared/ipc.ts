@@ -1,27 +1,29 @@
-// 렌더러 → 메인: CLI 실행 요청/취소, 인증 상태 조회, git diff 조회, 앱 설정 관리
-// 렌더러 → 메인: 백그라운드 플로우 실행/취소 및 상태 폴링
-// 렌더러 → 메인: Todo 단위 실행 플로우 시작/상태 조회
+// 렌더러 → 메인: CLI, 설정, Jira, 자동화 파이프라인
 export const IPC_CHANNELS = {
   cliRun: "cli:run",
   cliCancel: "cli:cancel",
   cliEvent: "cli:event",
   cliAuthStatus: "cli:auth-status",
-  flowInvoke: "flow:invoke",
-  flowCancel: "flow:cancel",
-  flowGetState: "flow:get-state",
-  flowReset: "flow:reset",
-  todoFlowStart: "todo-flow:start",
-  todoFlowGetState: "todo-flow:get-state",
-  todoFlowCancel: "todo-flow:cancel",
-  todoFlowExecuteAll: "todo-flow:execute-all",
-  todoFlowGetAllStates: "todo-flow:get-all-states",
   gitDiff: "git:diff",
   configGet: "config:get",
   configUpdate: "config:update",
   jiraTestConnection: "jira:test-connection",
   jiraFetchTicketTree: "jira:fetch-ticket-tree",
   jiraGetTicketTree: "jira:get-ticket-tree",
-  jiraProgress: "jira:progress"
+  jiraGetAllTicketTrees: "jira:get-all-ticket-trees",
+  jiraProgress: "jira:progress",
+  // 렌더러 → 메인: 자동화 파이프라인 실행 제어
+  runStart: "run:start",
+  runCancel: "run:cancel",
+  runGetState: "run:get-state",
+  runReset: "run:reset",
+  // 렌더러 → 메인: 작업 단위 제어 및 승인 게이트
+  taskGetState: "task:get-state",
+  taskGetAllStates: "task:get-all-states",
+  taskCancel: "task:cancel",
+  taskApprove: "task:approve",
+  taskReject: "task:reject",
+  taskRegenerate: "task:regenerate"
 } as const;
 
 // ─── Provider ──────────────────────────────────────
@@ -240,19 +242,6 @@ export interface CliSettings {
   permissionMode: CliPermissionMode;
 }
 
-// 목적: 파이프라인 실행 결과를 저장하여 페이지 재진입 시 복원한다.
-export interface PipelineState {
-  currentPhase: PipelinePhase;
-  holdAtPhase?: PipelinePhase;
-  dorFormalResult?: "pass" | "hold";
-  dorFormalReason?: string;
-  dorSemanticResult?: "proceed" | "hold";
-  dorSemanticReason?: string;
-  todos: TodoItem[];
-  holdReason?: string;
-  activityLog: ActivityLogEntry[];
-}
-
 // 목적: LangSmith 추적 설정을 정의한다.
 export interface TracingSettings {
   enabled: boolean;
@@ -276,9 +265,6 @@ export interface AppSettings {
   cli: CliSettings;
   tracing?: TracingSettings;
   jira?: JiraSettings;
-  ticket?: Ticket;
-  todos?: TodoItem[];
-  pipeline?: PipelineState;
 }
 
 // 목적: 부분 업데이트를 지원하기 위한 재귀적 Partial 타입
@@ -290,276 +276,192 @@ export interface AppSettingsUpdateRequest {
   settings: DeepPartial<AppSettings>;
 }
 
-// ─── LangChain Flow ─────────────────────────────────────
+// ─── Automation Pipeline: 상태 모델 ─────────────────────────
+// 목적: 요구사항 기반 자동화 파이프라인의 전체 상태를 정의한다.
 
-export type FlowType = "prompt" | "ticket-to-todo" | "todo-execution";
+export type RunStatus = "idle" | "running" | "paused" | "completed" | "failed";
 
-export interface FlowInvokeRequest {
-  flowId: string;
-  flowType: FlowType;
-  provider: ProviderType;
-  prompt: string;
-  cwd?: string;
-  /** 목적: 특정 그래프 노드부터 재실행할 때 노드 이름을 지정한다. */
-  startFromNode?: string;
-}
+export type RunStep =
+  | "idle"
+  | "ingestion"
+  | "analyze"
+  | "risk"
+  | "plan"
+  | "execution"
+  | "archiving"
+  | "done";
 
-export interface FlowInvokeResponse {
-  status: "accepted" | "rejected";
-  flowId: string;
-  message?: string;
-}
-
-export interface FlowCancelRequest {
-  flowId: string;
-}
-
-// ─── Background Flow State ──────────────────────────────
-// 목적: 메인 프로세스가 관리하는 플로우 실행 상태. 렌더러는 이 타입을 폴링한다.
-// idle: 대기, running: 실행 중, completed: 완료, error: 오류, interrupted: 앱 강제 종료로 중단
-
-export type FlowRunStatus = "idle" | "running" | "completed" | "error" | "interrupted";
-
-export interface FlowNodeProgress {
-  nodeName: string;
-  status: "running" | "completed" | "error";
-  startedAt: number;
-  endedAt?: number;
-  error?: string;
-}
-
-export interface FlowState {
-  flowId: string | null;
-  flowType: FlowType | null;
-  status: FlowRunStatus;
+export interface RunState {
+  runId: string;
+  ticketId: string;
+  status: RunStatus;
+  currentStep: RunStep;
   startedAt: number | null;
   endedAt: number | null;
   error: string | null;
-  nodeProgress: FlowNodeProgress[];
-  currentPhase: PipelinePhase;
-  holdAtPhase?: PipelinePhase;
-  dorFormalResult?: "pass" | "hold";
-  dorFormalReason?: string;
-  dorSemanticResult?: "proceed" | "hold";
-  dorSemanticReason?: string;
-  todos: TodoItem[];
-  holdReason?: string;
-  activityLog: ActivityLogEntry[];
+  parsedRequirements: ParsedRequirements | null;
+  riskAssessment: RiskAssessment | null;
+  executionPlan: ExecutionPlan | null;
 }
 
-// ─── Ticket (지라 이슈 정규화) ─────────────────────────────
-// 목적: 지라 이슈를 정규화한 Ticket과 하위 구조(AC, 시나리오)를 정의한다.
-// 계층: Ticket → Todo[] → WorkOrder[] (향후)
+// ─── 요구사항 ─────────────────────────────────────────
 
-export type WorkOrderMode = "fast" | "standard" | "strict";
-
-export interface TicketAC {
+export interface AcceptanceCriterion {
   id: string;
   description: string;
+  testable: boolean;
 }
 
-export interface TicketScenario {
+export interface TestScenario {
   id: string;
-  covers: string[];
   description: string;
+  linked_ac_ids: string[];
 }
 
-export interface Ticket {
-  jira_key: string;
-  summary: string;
-  acceptance_criteria: TicketAC[];
-  test_scenarios: TicketScenario[];
-  mode: WorkOrderMode;
-  mode_locked: boolean;
+export interface ParsedRequirements {
+  acceptance_criteria: AcceptanceCriterion[];
+  policy_rules: string[];
+  implementation_steps: string[];
+  test_scenarios: TestScenario[];
+  missing_sections: string[];
+  description_raw: string;
 }
 
-// ─── TodoItem (원자 작업 단위) ─────────────────────────────
-// 목적: Ticket에서 AC↔시나리오 매핑으로 생성된 원자 작업을 정의한다.
-// attempt이 마스터 — WorkOrder 생성 시 여기서 복사
+// ─── 위험 평가 ────────────────────────────────────────
 
-export type TodoStatus = "pending" | "in_progress" | "done" | "blocked";
-export type TodoRisk = "low" | "med" | "high";
-export type TodoRoute = "FE" | "BE";
+export interface RiskFactor {
+  category: string;
+  description: string;
+  severity: "low" | "medium" | "high";
+}
 
-export interface TodoItem {
+export interface RiskAssessment {
+  level: "low" | "medium" | "high";
+  factors: RiskFactor[];
+  recommendation: string;
+}
+
+// ─── 실행 계획 ────────────────────────────────────────
+
+export interface TaskUnit {
   id: string;
   title: string;
-  reason: string;
+  description: string;
+  linked_ac_ids: string[];
   deps: string[];
-  risk: TodoRisk;
-  route: TodoRoute;
-  status: TodoStatus;
-  attempt: { n: number; max: number };
-  failure_history: FailureRecord[];
-}
-
-export interface FailureRecord {
-  wo_id: string;
-  attempt_n: number;
-  verdict: "FAIL";
-  taxonomy: string;
-}
-
-// ─── TodoList (전체 컨테이너) ──────────────────────────────
-
-export interface TodoList {
-  version: number;
-  updated_at: string;
-  jira_key: string;
-  items: TodoItem[];
-}
-
-// ─── Todo 실행 플로우 ────────────────────────────────────────
-// 목적: Todo 1개의 독립 실행 플로우 단계를 정의한다.
-// workorder → explore → execute → verify → dod
-
-export type TodoFlowPhase = "workorder" | "explore" | "execute" | "verify" | "dod";
-export type TodoFlowStatus = "idle" | "running" | "completed" | "error";
-
-export interface TodoFlowStepState {
-  phase: TodoFlowPhase;
-  status: TodoFlowStatus;
-  startedAt: number | null;
-  endedAt: number | null;
-  result: Record<string, unknown> | null;
-  error: string | null;
-}
-
-export interface TodoFlowState {
-  todoId: string;
-  status: TodoFlowStatus;
-  currentPhase: TodoFlowPhase | null;
-  steps: TodoFlowStepState[];
-}
-
-// ─── Pipeline Phase ────────────────────────────────────────
-// 목적: 전체 파이프라인의 각 단계를 정의한다.
-// 현재 Ticket→Todo 변환은 intake → dor → plan 까지 사용한다.
-
-export type PipelinePhase =
-  | "idle" | "intake" | "dor" | "plan" | "workorder" | "explore" | "execute" | "verify" | "dod" | "done" | "hold";
-
-// ─── Activity / Run State ──────────────────────────────────
-
-export type RunStatus = "idle" | "running" | "completed" | "hold" | "failed";
-
-export interface ActivityLogEntry {
-  timestamp: number;
-  message: string;
-  type: "info" | "success" | "warning" | "error";
-}
-
-// ─── Todo 실행 플로우 IPC ───────────────────────────────────
-// 렌더러 → 메인: Todo 단위 실행 요청/취소/상태 조회
-
-export interface TodoFlowStartRequest {
-  todoId: string;
-  provider: ProviderType;
-  cwd?: string;
-  /** 목적: 중간 재시작 시 특정 노드부터 실행한다. */
-  startFromNode?: string;
-}
-
-export interface TodoFlowExecuteAllRequest {
-  provider: ProviderType;
-  cwd?: string;
-}
-
-export interface TodoFlowStartResponse {
-  status: "accepted" | "rejected";
-  todoId: string;
-  message?: string;
-}
-
-// 목적: 메인 프로세스가 관리하는 Todo별 백그라운드 실행 상태.
-// 렌더러는 todoId로 개별 Todo의 상태를 폴링한다.
-export interface TodoFlowBackendState {
-  todoId: string;
-  status: TodoFlowStatus;
-  currentPhase: TodoFlowPhase | null;
-  steps: TodoFlowStepState[];
-  workOrder: Record<string, unknown> | null;
-  evidence: Record<string, unknown> | null;
-  finalVerdict: "done" | "retry" | "hold" | null;
-  error: string | null;
-  startedAt: number | null;
-  endedAt: number | null;
-}
-
-// 목적: 모든 Todo의 실행 상태를 일괄 반환한다.
-export type TodoFlowAllStatesResponse = Record<string, TodoFlowBackendState>;
-
-// ─── WorkOrder (Atlas 7-Section + 운영 메타데이터) ──────────────
-// 목적: Atlas 7-Section + 운영 메타데이터. Todo 실행 시 Orchestrator가 생성한다.
-
-export interface WorkOrderScope {
-  editable_paths: string[];
-  forbidden_paths: string[];
-}
-
-export interface WorkOrder {
-  schema_version: string;
-  wo_id: string;
-  task: string;
-  expected_outcome: string;
-  required_tools: string[];
-  must_do: string[];
-  must_not: string[];
-  scope: WorkOrderScope;
-  verify_cmd: string;
-  evidence_required: string[];
-  mode: WorkOrderMode;
-  escalation_policy: "fast" | "standard" | "strict";
-  timeout_seconds: number;
-  attempt: { n: number; max: number };
-  frozen: boolean;
-  origin_todo_id: string;
-  retry_of_wo_id: string | null;
-}
-
-// ─── Evidence / ContextPack / ImplReport ────────────────────
-// 목적: Todo 실행 그래프의 노드별 산출물 타입. UI와 백엔드 양쪽에서 사용한다.
-
-// 목적: Verifier가 생성하고, DoDHook이 evidence_required 충족 여부를 검증한다.
-export interface Evidence {
-  verdict: "PASS" | "FAIL";
-  evidence: {
-    test_pass_log: string | null;
-    lint_clean: boolean | null;
-    coverage_pct: number | null;
-    regression_check: boolean | null;
-    exit_code: number | null;
-  };
-  scope_violations: string[];
-  failure_summary: {
-    symptom: string;
-    likely_cause: string;
-    next_hypothesis: string;
-    suggested_next_step: string;
-  } | null;
-  terminal?: TerminalLog;
-}
-
-// 목적: Explorer가 생성하는 Context Pack.
-export interface ContextPack {
-  relevant_files: string[];
-  test_files: string[];
-  scope_suggestion: {
+  scope: {
     editable_paths: string[];
     forbidden_paths: string[];
   };
-  notes: string;
-  terminal?: TerminalLog;
+  verify_cmd: string | null;
 }
 
-// 목적: Implementer가 생성하는 Implementation Report.
-export interface ImplReport {
-  changes: Array<{ path: string; action: string; diff_summary: string }>;
+export interface ExecutionPlan {
+  tasks: TaskUnit[];
+  execution_order: string[];
+}
+
+// ─── 작업 실행 상태 (Task 단위) ──────────────────────
+
+export type TaskStatus =
+  | "idle"
+  | "running"
+  | "awaiting_approval"
+  | "approved"
+  | "rejected"
+  | "completed"
+  | "failed";
+
+export type TaskStep =
+  | "idle"
+  | "generate_changes"
+  | "explain_changes"
+  | "self_verify"
+  | "revise"
+  | "approval_gate"
+  | "apply_changes"
+  | "post_verify"
+  | "done";
+
+export interface TaskExecutionState {
+  taskId: string;
+  status: TaskStatus;
+  currentStep: TaskStep;
+  attempt: { current: number; max: number };
+  changeSets: ChangeSet | null;
+  explanation: ChangeExplanation | null;
+  verification: VerificationResult | null;
+  approval: ApprovalRecord | null;
+  error: string | null;
+  startedAt: number | null;
+  endedAt: number | null;
+}
+
+// ─── 변경 ─────────────────────────────────────────────
+
+export interface ChangeSet {
+  changes: Array<{
+    path: string;
+    action: "create" | "modify" | "delete";
+    diff_summary: string;
+  }>;
+  diff: string | null;
   scope_violations: string[];
-  tests_added: string[];
-  notes: string;
-  terminal?: TerminalLog;
-  diff?: GitDiffResponse | null;
+}
+
+export interface ChangeExplanation {
+  summary: string;
+  change_reasons: Array<{
+    path: string;
+    reason: string;
+    linked_ac_ids: string[];
+  }>;
+  risk_notes: string[];
+}
+
+// ─── 검증 ─────────────────────────────────────────────
+
+export interface VerificationCheck {
+  name: string;
+  passed: boolean;
+  detail: string;
+}
+
+export interface VerificationResult {
+  verdict: "pass" | "fail";
+  checks: VerificationCheck[];
+  failure_reasons: string[];
+}
+
+// ─── 승인 ─────────────────────────────────────────────
+
+export interface ApprovalRecord {
+  decision: "approved" | "rejected" | "regenerate";
+  reason: string | null;
+  decidedAt: number;
+  decidedBy: "auto" | "human";
+}
+
+// ─── Automation IPC ─────────────────────────────────────
+
+export interface RunStartRequest {
+  ticketId: string;
+}
+
+export interface RunStartResponse {
+  status: "accepted" | "rejected";
+  runId: string;
+  message?: string;
+}
+
+export interface RunCancelRequest {
+  runId: string;
+}
+
+export interface TaskApprovalRequest {
+  taskId: string;
+  decision: "approved" | "rejected" | "regenerate";
+  reason?: string;
 }
 
 // ─── Jira Ticket (API 응답 정규화) ──────────────────────────
@@ -637,19 +539,20 @@ export interface AtlasDesktopApi {
   getCliAuthStatus(request: CliAuthCheckRequest): Promise<CliAuthStatusResponse>;
   getGitDiff(request: GitDiffRequest): Promise<GitDiffResponse>;
   onCliEvent(listener: (event: CliEvent) => void): () => void;
-  invokeFlow(request: FlowInvokeRequest): Promise<FlowInvokeResponse>;
-  cancelFlow(request: FlowCancelRequest): Promise<void>;
-  getFlowState(): Promise<FlowState>;
-  resetFlow(): Promise<void>;
-  startTodoFlow(request: TodoFlowStartRequest): Promise<TodoFlowStartResponse>;
-  getTodoFlowState(todoId: string): Promise<TodoFlowBackendState | null>;
-  cancelTodoFlow(todoId: string): Promise<void>;
-  executeAllTodoFlows(request: TodoFlowExecuteAllRequest): Promise<{ status: string }>;
-  getAllTodoFlowStates(): Promise<TodoFlowAllStatesResponse>;
+  // 자동화 파이프라인
+  startRun(request: RunStartRequest): Promise<RunStartResponse>;
+  cancelRun(request: RunCancelRequest): Promise<void>;
+  getRunState(): Promise<RunState | null>;
+  resetRun(): Promise<void>;
+  getTaskState(taskId: string): Promise<TaskExecutionState | null>;
+  getAllTaskStates(): Promise<Record<string, TaskExecutionState>>;
+  cancelTask(taskId: string): Promise<void>;
+  approveTask(request: TaskApprovalRequest): Promise<void>;
   getConfig(): Promise<AppSettings>;
   updateConfig(request: AppSettingsUpdateRequest): Promise<AppSettings>;
   testJiraConnection(request: JiraTestConnectionRequest): Promise<JiraTestConnectionResponse>;
   fetchJiraTicketTree(request: JiraFetchTicketTreeRequest): Promise<JiraFetchTicketTreeResponse>;
-  getJiraTicketTree(): Promise<JiraTicketTree | null>;
+  getJiraTicketTree(rootKey: string): Promise<JiraTicketTree | null>;
+  getAllJiraTicketTrees(): Promise<JiraTicketTree[]>;
   onJiraProgress(listener: (event: JiraProgressEvent) => void): () => void;
 }

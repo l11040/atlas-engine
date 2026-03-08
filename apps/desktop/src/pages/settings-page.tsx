@@ -2,54 +2,50 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useHeaderLeft } from "@/components/app-layout";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAppSettings } from "@/hooks/use-app-settings";
 import { cn } from "@/lib/utils";
-import type { CliPermissionMode, ProviderType, Ticket } from "@shared/ipc";
+import type { CliPermissionMode, ProviderType } from "@shared/ipc";
 
-type SettingsTab = "general" | "cli" | "jira" | "ticket" | "tracing";
+type SettingsTab = "general" | "cli" | "jira" | "tracing";
 
 const TABS: { key: SettingsTab; label: string }[] = [
   { key: "general", label: "일반" },
   { key: "cli", label: "CLI" },
   { key: "jira", label: "Jira" },
-  { key: "ticket", label: "티켓" },
   { key: "tracing", label: "추적" }
 ];
 
-// 목적: 티켓 탭에서 빈 상태일 때 보여줄 샘플 JSON
-const SAMPLE_TICKET: Ticket = {
-  jira_key: "PROJ-123",
-  summary: "API 엔드포인트에 인증 미들웨어 추가",
-  acceptance_criteria: [
-    { id: "AC-1", description: "Bearer 토큰 검증 미들웨어가 모든 /api/* 라우트에 적용된다" },
-    { id: "AC-2", description: "만료된 토큰으로 요청 시 401 Unauthorized를 반환한다" },
-    { id: "AC-3", description: "유효한 토큰으로 요청 시 사용자 정보가 req.user에 주입된다" }
-  ],
-  test_scenarios: [
-    { id: "TS-1", covers: ["AC-1"], description: "유효한 Bearer 토큰으로 /api/users 접근 시 200 응답" },
-    { id: "TS-2", covers: ["AC-2"], description: "만료된 토큰으로 /api/users 접근 시 401 응답" },
-    { id: "TS-3", covers: ["AC-1", "AC-3"], description: "유효한 토큰으로 요청 시 req.user에 사용자 ID 포함 확인" }
-  ],
-  mode: "standard",
-  mode_locked: true
-};
-
 export default function SettingsPage() {
   const navigate = useNavigate();
+  const setHeaderLeft = useHeaderLeft();
   const { settings, loading, saveConfig } = useAppSettings();
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
+
+  // 목적: 헤더 좌측에 뒤로가기 + 타이틀을 표시한다.
+  useEffect(() => {
+    setHeaderLeft(
+      <>
+        <button
+          onClick={() => navigate("/")}
+          className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:text-text-strong"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </button>
+        <span className="text-sm font-semibold text-text-strong">설정</span>
+      </>
+    );
+    return () => setHeaderLeft(null);
+  }, [setHeaderLeft, navigate]);
 
   const [defaultCwd, setDefaultCwd] = useState("");
   const [activeProvider, setActiveProvider] = useState<ProviderType>("claude");
   const [timeoutSec, setTimeoutSec] = useState(300);
   const [permissionMode, setPermissionMode] = useState<CliPermissionMode>("auto");
-  const [ticketJson, setTicketJson] = useState("");
-  const [jsonError, setJsonError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [jiraBaseUrl, setJiraBaseUrl] = useState("");
   const [jiraEmail, setJiraEmail] = useState("");
@@ -71,7 +67,6 @@ export default function SettingsPage() {
       setActiveProvider(settings.activeProvider);
       setTimeoutSec(Math.round(settings.cli.timeoutMs / 1000));
       setPermissionMode(settings.cli.permissionMode);
-      setTicketJson(settings.ticket ? JSON.stringify(settings.ticket, null, 2) : "");
       if (settings.jira) {
         setJiraBaseUrl(settings.jira.baseUrl);
         setJiraEmail(settings.jira.email);
@@ -89,7 +84,6 @@ export default function SettingsPage() {
 
   async function handleSave() {
     setSaving(true);
-    setJsonError(null);
     try {
       const base: Record<string, unknown> = {
         defaultCwd,
@@ -111,18 +105,6 @@ export default function SettingsPage() {
           endpoint: tracingEndpoint
         }
       };
-
-      // 목적: 티켓 JSON이 있으면 파싱 후 설정에 포함한다.
-      if (ticketJson.trim()) {
-        try {
-          base.ticket = JSON.parse(ticketJson);
-        } catch {
-          setJsonError("티켓 JSON 파싱 실패. 올바른 JSON 형식인지 확인하세요.");
-          return;
-        }
-      } else {
-        base.ticket = undefined;
-      }
 
       await saveConfig(base);
     } finally {
@@ -151,23 +133,8 @@ export default function SettingsPage() {
     }
   }
 
-  function handleLoadSample() {
-    setTicketJson(JSON.stringify(SAMPLE_TICKET, null, 2));
-    setJsonError(null);
-  }
-
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex items-center gap-3">
-        <button
-          onClick={() => navigate("/")}
-          className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:text-text-strong"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-        <span className="text-sm font-semibold text-text-strong">설정</span>
-      </header>
-
       {loading ? (
         <div className="flex items-center justify-center py-16 text-xs text-text-soft">설정 로드 중...</div>
       ) : (
@@ -382,43 +349,6 @@ export default function SettingsPage() {
                       설정하면 홈에서 번호만 입력해도 자동으로 프리픽스를 붙입니다. (예: 2 → GRID-2)
                     </p>
                   </div>
-                </div>
-              </>
-            )}
-
-            {activeTab === "ticket" && (
-              <>
-                <div className="flex items-center">
-                  <h2 className="text-xs font-semibold text-text-strong">티켓</h2>
-                  <div className="ml-auto flex gap-2">
-                    <Button onClick={handleLoadSample} variant="outline" size="sm" className="h-7 text-xs">
-                      샘플 로드
-                    </Button>
-                    <Button onClick={handleSave} disabled={saving} size="sm" className="h-7 text-xs">
-                      {saving ? "저장 중..." : "저장"}
-                    </Button>
-                  </div>
-                </div>
-
-                {jsonError && (
-                  <div className="rounded-md border border-status-danger/30 bg-status-danger/10 px-3 py-2 text-xs text-status-danger">
-                    {jsonError}
-                  </div>
-                )}
-
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-semibold text-text-muted">Ticket JSON</Label>
-                  <Textarea
-                    value={ticketJson}
-                    onChange={(e) => setTicketJson(e.target.value)}
-                    placeholder='{"jira_key": "PROJ-123", "summary": "...", "acceptance_criteria": [...], "test_scenarios": [...], ...}'
-                    className="min-h-[360px] border-border-subtle bg-surface-subtle font-mono text-xs text-text-strong placeholder:text-text-soft"
-                  />
-                  <p className="text-2xs text-text-soft">
-                    지라 이슈를 정규화한 Ticket JSON을 입력하세요. AC와 시나리오를 포함해야 합니다.
-                    <br />
-                    비워두면 티켓이 해제됩니다. Todo는 파이프라인 실행 시 자동 생성됩니다.
-                  </p>
                 </div>
               </>
             )}

@@ -1,12 +1,7 @@
 // 책임: 서브그래프 간 공유 유틸리티 함수를 제공한다.
 
 import type { CliEvent } from "@atlas/cli-runtime";
-import type { ActivityLogEntry, TerminalLog, ToolTimelineEntry } from "../../../../../shared/ipc";
-
-// 목적: 타임스탬프를 포함한 활동 로그 엔트리를 생성한다.
-export function logEntry(message: string, type: ActivityLogEntry["type"] = "info"): ActivityLogEntry {
-  return { timestamp: Date.now(), message, type };
-}
+import type { TerminalLog, ToolTimelineEntry } from "../../../../../shared/ipc";
 
 // 목적: LLM 응답에서 JSON 블록을 추출한다.
 // 이유: CLI 에이전트가 자연어+JSON 혼합 응답을 반환하므로, 여러 패턴을 시도하여 JSON을 추출한다.
