@@ -1,0 +1,29 @@
+{
+  "name": "@atlas/cli-runtime",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "tsup src/index.ts --format cjs,esm --dts --out-dir dist --watch",
+    "build": "tsup src/index.ts --format cjs,esm --dts --out-dir dist",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "require": "./dist/index.cjs",
+      "import": "./dist/index.js"
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsup": "^8.4.0",
+    "typescript": "^5.8.2"
+  }
+}

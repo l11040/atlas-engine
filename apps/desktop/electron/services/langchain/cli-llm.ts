@@ -2,8 +2,7 @@
 
 import { LLM, type BaseLLMParams } from "@langchain/core/language_models/llms";
 import type { CallbackManagerForLLMRun } from "@langchain/core/callbacks/manager";
-import type { CliEvent, CliPermissionMode, ProviderType } from "../../../shared/ipc";
-import { runCliToCompletion } from "./cli-spawn-runner";
+import { runCliToCompletion, type CliEvent, type CliPermissionMode, type ProviderType } from "@atlas/cli-runtime";
 
 export interface CliLlmParams extends BaseLLMParams {
   provider: ProviderType;

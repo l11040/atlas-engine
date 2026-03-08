@@ -2,7 +2,7 @@
 // 이유: v2.3 Section 1 — Verifier가 Runner 실행 결과로 PASS/FAIL 판정, Evidence를 생성한다.
 
 import type { CliLlm } from "../../../cli-llm";
-import { CliExecutionError } from "../../../cli-spawn-runner";
+import { CliExecutionError } from "@atlas/cli-runtime";
 import { buildTerminalLogFromEvents, extractJson, logEntry } from "../../shared/utils";
 import type { Evidence, TodoExecutionState } from "../state";
 

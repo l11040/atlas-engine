@@ -6,6 +6,7 @@ import { registerTodoFlowIpc } from "./ipc/register-todo-flow-ipc";
 import { loadSettings } from "./services/config/settings";
 import { BackgroundFlowService } from "./services/flow/background-flow-service";
 import { TodoFlowService } from "./services/flow/todo-flow-service";
+import { closeAppDatabase } from "./services/storage/sqlite-db";
 import { createMainWindow } from "./window/create-main-window";
 
 process.on("uncaughtException", (error) => {
@@ -43,4 +44,8 @@ app.whenReady().then(async () => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+app.on("before-quit", () => {
+  closeAppDatabase();
 });

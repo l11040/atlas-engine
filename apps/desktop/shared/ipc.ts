@@ -24,6 +24,18 @@ export const IPC_CHANNELS = {
 
 export type ProviderType = "claude" | "codex";
 
+// ─── CLI Conversation ───────────────────────────────────
+
+// 목적: 세션 이어쓰기/재개/신규 시작 정책을 정의한다.
+export type CliConversationMode = "new" | "continue-last" | "resume-id";
+
+export interface CliConversationOptions {
+  mode?: CliConversationMode;
+  sessionId?: string;
+  forkOnResume?: boolean;
+  ephemeral?: boolean;
+}
+
 // ─── CLI Run (정규화) ───────────────────────────────────
 
 export interface CliRunRequest {
@@ -31,6 +43,7 @@ export interface CliRunRequest {
   provider: ProviderType;
   prompt: string;
   cwd?: string;
+  conversation?: CliConversationOptions;
 }
 
 export interface CliRunResponse {
@@ -170,6 +183,7 @@ export type CliEvent =
   | { requestId: string; provider: ProviderType; phase: "tool-use"; tool: CliToolUse; timestamp: number }
   | { requestId: string; provider: ProviderType; phase: "tool-result"; toolResult: CliToolResult; timestamp: number }
   | { requestId: string; provider: ProviderType; phase: "result"; result: CliSessionResult; timestamp: number }
+  | { requestId: string; provider: ProviderType; phase: "parse-error"; rawLine: string; error: string; timestamp: number }
   | { requestId: string; provider: ProviderType; phase: "stderr"; chunk: string; timestamp: number }
   | { requestId: string; provider: ProviderType; phase: "completed"; exitCode: number; signal: NodeJS.Signals | null; timestamp: number }
   | { requestId: string; provider: ProviderType; phase: "failed"; error: string; timestamp: number }
@@ -213,8 +227,8 @@ export interface GitDiffResponse {
 // ─── App Settings ───────────────────────────────────────
 
 // 목적: provider 간 공통 권한 모드를 정의한다.
-// auto: 모든 도구 권한을 자동 승인 (Claude: bypassPermissions, Codex: never)
-// manual: 사용자 확인 후 실행 (Claude: default, Codex: on-request)
+// auto: 모든 도구 권한을 자동 승인 (Claude: bypassPermissions, Codex: --full-auto)
+// manual: 사용자 확인 후 실행 (Claude: default, Codex: 기본 동작)
 export type CliPermissionMode = "auto" | "manual";
 
 export interface CliSettings {

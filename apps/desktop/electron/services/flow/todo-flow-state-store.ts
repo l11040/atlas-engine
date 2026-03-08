@@ -1,9 +1,6 @@
-// 책임: Todo별 실행 상태의 메모리 캐시와 폴더-per-Todo 디스크 영속화를 관리한다.
-// 이유: 앱 재시작 시 상태를 복원하고, 노드별 artifact JSON을 개별 저장하여 중간 재시작을 지원한다.
+// 책임: Todo별 실행 상태의 메모리 캐시와 SQLite 영속화를 관리한다.
+// 이유: 앱 재시작 후 상태 복원과 단계별 진행 상태 추적을 안정적으로 유지한다.
 
-import { app } from "electron";
-import { appendFile, mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
-import path from "node:path";
 import type {
   ActivityLogEntry,
   TodoFlowBackendState,
@@ -11,36 +8,8 @@ import type {
   TodoFlowStatus,
   TodoFlowStepState
 } from "../../../shared/ipc";
-
-// ─── 파일별 타입 정의 ───────────────────────────────────
-
-interface ActivePointer {
-  activeTodoIds: string[];
-}
-
-interface MetaFile {
-  todoId: string;
-  status: TodoFlowStatus;
-  currentPhase: TodoFlowPhase | null;
-  finalVerdict: "done" | "retry" | "hold" | null;
-  error: string | null;
-  startedAt: number | null;
-  endedAt: number | null;
-}
-
-interface DodFile {
-  dodResult: "pass" | "fail";
-  dodReason: string;
-}
-
-// 목적: phase 이름을 artifact 파일 이름에 매핑한다.
-const PHASE_TO_ARTIFACT: Record<TodoFlowPhase, string> = {
-  workorder: "workorder.json",
-  explore: "context-pack.json",
-  execute: "impl-report.json",
-  verify: "evidence.json",
-  dod: "dod.json"
-};
+import { decodeStoredValue, encodeStoredValue } from "../storage/codec";
+import { getAppDatabase } from "../storage/sqlite-db";
 
 const FLOW_PHASES: TodoFlowPhase[] = ["workorder", "explore", "execute", "verify", "dod"];
 
@@ -53,6 +22,51 @@ function createInitialSteps(): TodoFlowStepState[] {
     result: null,
     error: null
   }));
+}
+
+function normalizeSteps(raw: unknown): TodoFlowStepState[] {
+  if (!Array.isArray(raw)) {
+    return createInitialSteps();
+  }
+
+  const byPhase = new Map<TodoFlowPhase, TodoFlowStepState>();
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const step = item as Partial<TodoFlowStepState>;
+    if (!step.phase || !FLOW_PHASES.includes(step.phase)) continue;
+    byPhase.set(step.phase, {
+      phase: step.phase,
+      status: step.status ?? "idle",
+      startedAt: step.startedAt ?? null,
+      endedAt: step.endedAt ?? null,
+      result: step.result ?? null,
+      error: step.error ?? null
+    });
+  }
+
+  return FLOW_PHASES.map((phase) => byPhase.get(phase) ?? {
+    phase,
+    status: "idle",
+    startedAt: null,
+    endedAt: null,
+    result: null,
+    error: null
+  });
+}
+
+function normalizeState(raw: Partial<TodoFlowBackendState>, fallbackTodoId: string): TodoFlowBackendState {
+  return {
+    todoId: raw.todoId ?? fallbackTodoId,
+    status: raw.status ?? "idle",
+    currentPhase: raw.currentPhase ?? null,
+    steps: normalizeSteps(raw.steps),
+    workOrder: raw.workOrder ?? null,
+    evidence: raw.evidence ?? null,
+    finalVerdict: raw.finalVerdict ?? null,
+    error: raw.error ?? null,
+    startedAt: raw.startedAt ?? null,
+    endedAt: raw.endedAt ?? null
+  };
 }
 
 // ─── TodoFlowStateStore ─────────────────────────────────
@@ -76,196 +90,114 @@ export class TodoFlowStateStore {
 
   // 목적: 메모리에 상태를 설정한다.
   setState(todoId: string, state: TodoFlowBackendState): void {
-    this.states.set(todoId, state);
+    this.states.set(todoId, normalizeState(state, todoId));
   }
 
-  // 목적: 상태의 메타 정보를 갱신하고 디스크에 저장한다.
+  // 목적: 상태의 메타 정보를 SQLite에 저장한다.
   async saveMeta(todoId: string): Promise<void> {
-    const state = this.states.get(todoId);
-    if (!state) return;
-
-    const meta: MetaFile = {
-      todoId: state.todoId,
-      status: state.status,
-      currentPhase: state.currentPhase,
-      finalVerdict: state.finalVerdict,
-      error: state.error,
-      startedAt: state.startedAt,
-      endedAt: state.endedAt
-    };
-
-    const dir = this.getTodoDir(todoId);
-    await mkdir(dir, { recursive: true });
-    await this.atomicWriteJson(path.join(dir, "meta.json"), meta);
+    this.persistTodoState(todoId);
   }
 
-  // 목적: steps 배열을 디스크에 저장한다.
+  // 목적: steps 배열을 SQLite에 저장한다.
   async saveSteps(todoId: string): Promise<void> {
-    const state = this.states.get(todoId);
-    if (!state) return;
-
-    const dir = this.getTodoDir(todoId);
-    await mkdir(dir, { recursive: true });
-    await this.atomicWriteJson(path.join(dir, "steps.json"), state.steps);
+    this.persistTodoState(todoId);
   }
 
-  // 목적: 특정 phase의 노드 산출물을 개별 파일로 저장한다.
-  async saveNodeArtifact(todoId: string, phase: TodoFlowPhase, data: unknown): Promise<void> {
-    const fileName = PHASE_TO_ARTIFACT[phase];
-    if (!fileName) return;
-
-    const dir = this.getTodoDir(todoId);
-    await mkdir(dir, { recursive: true });
-    await this.atomicWriteJson(path.join(dir, fileName), data);
+  // 목적: phase 산출물 저장 시 전체 상태를 함께 갱신한다.
+  async saveNodeArtifact(todoId: string, _phase: TodoFlowPhase, _data: unknown): Promise<void> {
+    this.persistTodoState(todoId);
   }
 
-  // 목적: 활동 로그를 JSONL 형식으로 append한다.
+  // 목적: 활동 로그를 SQLite에 append 저장한다.
   async appendActivity(todoId: string, entries: ActivityLogEntry[]): Promise<void> {
     if (entries.length === 0) return;
-    const dir = this.getTodoDir(todoId);
-    await mkdir(dir, { recursive: true });
-    const filePath = path.join(dir, "activity.jsonl");
-    const lines = entries.map((e) => JSON.stringify(e)).join("\n") + "\n";
-    await appendFile(filePath, lines, "utf-8");
+
+    const db = getAppDatabase();
+    const insert = db.prepare(`
+      INSERT INTO todo_flow_activity (todo_id, entry, created_at)
+      VALUES (?, ?, ?)
+    `);
+
+    const now = Date.now();
+    for (const entry of entries) {
+      insert.run(todoId, encodeStoredValue(entry), now);
+    }
   }
 
-  // 목적: active.json을 갱신한다. 현재 활성 Todo ID 목록을 저장한다.
+  // 목적: 기존 호출부 호환을 위해 메서드를 유지한다.
   async saveActivePointer(): Promise<void> {
-    const activeTodoIds: string[] = [];
-    for (const [id, state] of this.states) {
-      if (state.status === "running") {
-        activeTodoIds.push(id);
-      }
-    }
-    await mkdir(this.getTodoFlowsDir(), { recursive: true });
-    await this.atomicWriteJson(this.getActiveJsonPath(), { activeTodoIds } satisfies ActivePointer);
+    // no-op: SQLite에서는 active pointer를 별도 파일로 관리하지 않는다.
   }
 
-  // 목적: 앱 시작 시 디스크에서 모든 Todo 상태를 복원한다.
+  // 목적: 앱 시작 시 SQLite에서 상태를 복원한다.
   async loadFromDisk(): Promise<void> {
-    const baseDir = this.getTodoFlowsDir();
-    try {
-      const entries = await readdir(baseDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        const todoId = entry.name;
-        const loaded = await this.loadTodoFromFolder(todoId);
-        if (loaded) {
-          this.states.set(todoId, loaded);
-        }
-      }
-    } catch {
-      // 이유: 디렉토리가 없으면 초기 상태로 시작한다.
-    }
+    this.states = this.loadStatesFromDatabase();
   }
 
-  // 목적: running 상태인 Todo를 interrupted로 마킹한다 (앱 비정상 종료 후 복구).
+  // 목적: running 상태인 Todo를 interrupted로 마킹한다.
   async markAllRunningAsInterrupted(): Promise<void> {
     for (const [todoId, state] of this.states) {
-      if (state.status === "running") {
-        state.status = "error";
-        state.error = "앱 재시작으로 중단됨";
-        state.endedAt = Date.now();
+      if (state.status !== "running") continue;
 
-        // 목적: running 상태인 step도 error로 전환한다.
-        for (const step of state.steps) {
-          if (step.status === "running") {
-            step.status = "error";
-            step.error = "앱 재시작으로 중단됨";
-            step.endedAt = Date.now();
-          }
-        }
+      state.status = "error";
+      state.error = "앱 재시작으로 중단됨";
+      state.endedAt = Date.now();
 
-        await this.saveMeta(todoId);
-        await this.saveSteps(todoId);
+      for (const step of state.steps) {
+        if (step.status !== "running") continue;
+        step.status = "error";
+        step.error = "앱 재시작으로 중단됨";
+        step.endedAt = Date.now();
       }
+
+      this.states.set(todoId, state);
+      this.persistTodoState(todoId);
     }
   }
 
   // 목적: 특정 Todo의 상태를 초기화한다.
   async resetState(todoId: string): Promise<void> {
     this.states.delete(todoId);
+    const db = getAppDatabase();
+    db.prepare("DELETE FROM todo_flow_states WHERE todo_id = ?").run(todoId);
+    db.prepare("DELETE FROM todo_flow_activity WHERE todo_id = ?").run(todoId);
   }
 
   // 목적: 전체 상태를 초기화한다.
   async resetAll(): Promise<void> {
     this.states.clear();
-    await mkdir(this.getTodoFlowsDir(), { recursive: true });
-    await this.atomicWriteJson(this.getActiveJsonPath(), { activeTodoIds: [] } satisfies ActivePointer);
+    const db = getAppDatabase();
+    db.exec("DELETE FROM todo_flow_states;");
+    db.exec("DELETE FROM todo_flow_activity;");
   }
 
-  // ─── 경로 헬퍼 ─────────────────────────────────────────
+  // ─── SQLite ───────────────────────────────────────────
 
-  private getTodoFlowsDir(): string {
-    return path.join(app.getPath("userData"), "todo-flows");
+  private persistTodoState(todoId: string): void {
+    const state = this.states.get(todoId);
+    if (!state) return;
+
+    const db = getAppDatabase();
+    db.prepare(`
+      INSERT INTO todo_flow_states (todo_id, data, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(todo_id) DO UPDATE SET
+        data = excluded.data,
+        updated_at = excluded.updated_at
+    `).run(todoId, encodeStoredValue(state), Date.now());
   }
 
-  private getTodoDir(todoId: string): string {
-    return path.join(this.getTodoFlowsDir(), todoId);
-  }
+  private loadStatesFromDatabase(): Map<string, TodoFlowBackendState> {
+    const db = getAppDatabase();
+    const rows = db.prepare("SELECT todo_id, data FROM todo_flow_states").all() as Array<{ todo_id: string; data: unknown }>;
+    const states = new Map<string, TodoFlowBackendState>();
 
-  private getActiveJsonPath(): string {
-    return path.join(this.getTodoFlowsDir(), "active.json");
-  }
-
-  // ─── 파일 로드 ──────────────────────────────────────────
-
-  // 목적: 개별 Todo 폴더에서 상태를 복원한다.
-  // 주의: 일부 파일 누락 시 해당 영역만 기본값으로 폴백한다.
-  private async loadTodoFromFolder(todoId: string): Promise<TodoFlowBackendState | null> {
-    const dir = this.getTodoDir(todoId);
-
-    const [metaResult, stepsResult, workorderResult, evidenceResult] =
-      await Promise.allSettled([
-        this.readJsonSafe<MetaFile>(path.join(dir, "meta.json")),
-        this.readJsonSafe<TodoFlowStepState[]>(path.join(dir, "steps.json")),
-        this.readJsonSafe<Record<string, unknown>>(path.join(dir, "workorder.json")),
-        this.readJsonSafe<Record<string, unknown>>(path.join(dir, "evidence.json"))
-      ]);
-
-    const meta = this.settled(metaResult);
-    if (!meta) return null;
-
-    const steps = this.settled(stepsResult);
-    const workOrder = this.settled(workorderResult);
-    const evidence = this.settled(evidenceResult);
-
-    return {
-      todoId: meta.todoId,
-      status: meta.status,
-      currentPhase: meta.currentPhase,
-      steps: steps ?? createInitialSteps(),
-      workOrder: workOrder ?? null,
-      evidence: evidence ?? null,
-      finalVerdict: meta.finalVerdict,
-      error: meta.error,
-      startedAt: meta.startedAt,
-      endedAt: meta.endedAt
-    };
-  }
-
-  // ─── I/O 유틸리티 ──────────────────────────────────────
-
-  // 목적: tmp 파일에 쓰고 rename으로 교체하여 crash-safe 쓰기를 보장한다.
-  private async atomicWriteJson(filePath: string, data: unknown): Promise<void> {
-    await mkdir(path.dirname(filePath), { recursive: true });
-    const tmpPath = filePath + ".tmp";
-    await writeFile(tmpPath, JSON.stringify(data, null, 2), "utf-8");
-    await rename(tmpPath, filePath);
-  }
-
-  // 목적: JSON 파일을 읽어 파싱된 객체를 반환한다. 실패 시 null.
-  private async readJsonSafe<T>(filePath: string): Promise<T | null> {
-    try {
-      const raw = await readFile(filePath, "utf-8");
-      return JSON.parse(raw) as T;
-    } catch {
-      return null;
+    for (const row of rows) {
+      const decoded = decodeStoredValue<Partial<TodoFlowBackendState>>(row.data);
+      if (!decoded) continue;
+      states.set(row.todo_id, normalizeState(decoded, row.todo_id));
     }
-  }
 
-  // 목적: Promise.allSettled 결과에서 fulfilled 값을 추출한다.
-  private settled<T>(result: PromiseSettledResult<T>): T | null {
-    return result.status === "fulfilled" ? result.value : null;
+    return states;
   }
 }

@@ -1,7 +1,7 @@
 // 책임: CLI 실행 세션의 상태·타임라인·결과를 provider에 관계없이 관리한다.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { CliEvent, ProviderType } from "@shared/ipc";
+import type { CliConversationOptions, CliEvent, ProviderType } from "@shared/ipc";
 
 export type SessionStatus = "idle" | "running" | "completed" | "failed" | "cancelled";
 
@@ -29,6 +29,7 @@ export function useCliSession(defaultProvider: ProviderType = "claude") {
   const [costUsd, setCostUsd] = useState<number | null>(null);
   const [durationMs, setDurationMs] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [parseErrorCount, setParseErrorCount] = useState(0);
 
   const requestIdRef = useRef<string | null>(null);
   const touchedFilesRef = useRef<Set<string>>(new Set());
@@ -55,7 +56,20 @@ export function useCliSession(defaultProvider: ProviderType = "claude") {
           // 목적: 파일 수정 도구에서 경로를 수집한다.
           const pathField = FILE_PATH_TOOLS[event.tool.name];
           if (pathField && typeof event.tool.input[pathField] === "string") {
-            touchedFilesRef.current.add(event.tool.input[pathField] as string);
+            const raw = event.tool.input[pathField] as string;
+            const explicitList = event.tool.input.file_paths;
+            if (Array.isArray(explicitList)) {
+              for (const path of explicitList) {
+                if (typeof path === "string" && path.trim()) {
+                  touchedFilesRef.current.add(path.trim());
+                }
+              }
+            } else {
+              // 주의: Codex file_change는 다중 경로를 \", \"로 합쳐 보낼 수 있어 분해한다.
+              for (const path of raw.split(",").map((part) => part.trim()).filter(Boolean)) {
+                touchedFilesRef.current.add(path);
+              }
+            }
           }
           break;
         }
@@ -71,6 +85,9 @@ export function useCliSession(defaultProvider: ProviderType = "claude") {
         case "result":
           if (event.result.costUsd != null) setCostUsd(event.result.costUsd);
           if (event.result.durationMs != null) setDurationMs(event.result.durationMs);
+          break;
+        case "parse-error":
+          setParseErrorCount((prev) => prev + 1);
           break;
         case "completed":
           setStatus("completed");
@@ -92,7 +109,7 @@ export function useCliSession(defaultProvider: ProviderType = "claude") {
   }, []);
 
   const execute = useCallback(
-    async (prompt: string, cwd?: string, provider?: ProviderType) => {
+    async (prompt: string, cwd?: string, provider?: ProviderType, conversation?: CliConversationOptions) => {
       const id = crypto.randomUUID();
       requestIdRef.current = id;
       touchedFilesRef.current = new Set();
@@ -101,13 +118,15 @@ export function useCliSession(defaultProvider: ProviderType = "claude") {
       setCostUsd(null);
       setDurationMs(null);
       setErrorMessage(null);
+      setParseErrorCount(0);
       setStatus("running");
 
       const res = await window.atlas.runCli({
         requestId: id,
         provider: provider ?? defaultProvider,
         prompt: prompt.trim(),
-        ...(cwd ? { cwd } : {})
+        ...(cwd ? { cwd } : {}),
+        ...(conversation ? { conversation } : {})
       });
 
       if (res.status === "rejected") {
@@ -131,6 +150,7 @@ export function useCliSession(defaultProvider: ProviderType = "claude") {
     setCostUsd(null);
     setDurationMs(null);
     setErrorMessage(null);
+    setParseErrorCount(0);
     setStatus("idle");
   }, []);
 
@@ -144,6 +164,7 @@ export function useCliSession(defaultProvider: ProviderType = "claude") {
     costUsd,
     durationMs,
     errorMessage,
+    parseErrorCount,
     execute,
     cancel,
     reset,

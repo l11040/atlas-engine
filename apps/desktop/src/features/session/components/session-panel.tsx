@@ -74,6 +74,11 @@ export function SessionPanel({ provider = "claude", defaultCwd }: SessionPanelPr
                 <span className="text-2xs text-text-muted">소요: {(session.durationMs / 1000).toFixed(1)}s</span>
               )}
               {session.errorMessage && <span className="text-2xs text-status-danger">{session.errorMessage}</span>}
+              {session.parseErrorCount > 0 && (
+                <span className="text-2xs text-status-warning">
+                  파싱 경고 {session.parseErrorCount}건 (로그 확인 필요)
+                </span>
+              )}
               <Button onClick={handleReset} variant="outline" size="sm" className="ml-auto">
                 초기화
               </Button>

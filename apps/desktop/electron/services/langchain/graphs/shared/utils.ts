@@ -1,6 +1,7 @@
 // 책임: 서브그래프 간 공유 유틸리티 함수를 제공한다.
 
-import type { ActivityLogEntry, CliEvent, TerminalLog, ToolTimelineEntry } from "../../../../../shared/ipc";
+import type { CliEvent } from "@atlas/cli-runtime";
+import type { ActivityLogEntry, TerminalLog, ToolTimelineEntry } from "../../../../../shared/ipc";
 
 // 목적: 타임스탬프를 포함한 활동 로그 엔트리를 생성한다.
 export function logEntry(message: string, type: ActivityLogEntry["type"] = "info"): ActivityLogEntry {
@@ -65,6 +66,7 @@ export function buildTerminalLogFromEvents(events: CliEvent[], fallbackError?: s
   const toolMap = new Map<string, number>();
   const textChunks: string[] = [];
   const stderrChunks: string[] = [];
+  const parseErrorChunks: string[] = [];
   let status: TerminalLog["status"] = "completed";
   let error = fallbackError;
 
@@ -75,6 +77,10 @@ export function buildTerminalLogFromEvents(events: CliEvent[], fallbackError?: s
     }
     if (event.phase === "stderr") {
       stderrChunks.push(event.chunk);
+      continue;
+    }
+    if (event.phase === "parse-error") {
+      parseErrorChunks.push(`[parse-error] ${event.error}: ${event.rawLine.slice(0, 200)}`);
       continue;
     }
     if (event.phase === "failed") {
@@ -114,7 +120,7 @@ export function buildTerminalLogFromEvents(events: CliEvent[], fallbackError?: s
   return {
     status,
     output: textChunks.join(""),
-    stderr: stderrChunks.join(""),
+    stderr: [...stderrChunks, ...parseErrorChunks].join(""),
     error,
     toolTimeline
   };

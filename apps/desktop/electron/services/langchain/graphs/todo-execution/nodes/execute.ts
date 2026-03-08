@@ -2,7 +2,7 @@
 // 이유: v2.3 Section 1 — Implementer가 스코프/금지 준수하며 코드를 변경하고 변경 보고를 생성한다.
 
 import type { CliLlm } from "../../../cli-llm";
-import { CliExecutionError } from "../../../cli-spawn-runner";
+import { CliExecutionError } from "@atlas/cli-runtime";
 import { getGitDiff } from "../../../../git/diff";
 import { buildTerminalLogFromEvents, extractJson, logEntry } from "../../shared/utils";
 import type { ImplReport, TodoExecutionState } from "../state";

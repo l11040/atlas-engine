@@ -1,9 +1,8 @@
 // 책임: Claude stream-json 이벤트를 정규화된 CliEvent 배열로 변환한다.
 
-import type { CliEvent, StreamJsonEvent } from "../../../../shared/ipc";
+import type { CliEvent, StreamJsonEvent } from "../types";
 
-// 목적: 하나의 StreamJsonEvent를 0개 이상의 정규화된 CliEvent로 분해한다.
-export function normalizeStreamJsonEvent(requestId: string, raw: StreamJsonEvent): CliEvent[] {
+export function normalizeClaudeStreamJsonEvent(requestId: string, raw: StreamJsonEvent): CliEvent[] {
   const base = { requestId, provider: "claude" as const, timestamp: Date.now() };
   const events: CliEvent[] = [];
 
@@ -39,7 +38,6 @@ export function normalizeStreamJsonEvent(requestId: string, raw: StreamJsonEvent
       }
     });
   }
-  // 이유: system init 이벤트는 UI에 전달할 정보가 없으므로 무시한다.
 
   return events;
 }

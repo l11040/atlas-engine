@@ -2,7 +2,7 @@
 // 이유: v2.3 Section 1 — Explorer가 탐색/재현/파일·테스트 위치 파악, 스코프 추천을 담당한다.
 
 import type { CliLlm } from "../../../cli-llm";
-import { CliExecutionError } from "../../../cli-spawn-runner";
+import { CliExecutionError } from "@atlas/cli-runtime";
 import { buildTerminalLogFromEvents, extractJson, logEntry } from "../../shared/utils";
 import type { ContextPack, TodoExecutionState } from "../state";
 
