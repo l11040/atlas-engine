@@ -12,7 +12,12 @@ pnpm dev
 ## 구조
 
 - `apps/desktop`: 데스크탑 앱 (Electron + Vite)
-- `packages/*`: 향후 공통 패키지 확장 용도
+- `packages/cli-runtime`: Claude/Codex stdin/stdout 공통 런타임 패키지
+
+## 문서
+
+- `docs/cli-stdin-stdout-design-review.md`: 현재 설계와 비판적 리뷰
+- `docs/cli-runtime-user-guide.md`: 패키지 사용 설명서
 
 ## 주요 명령
 

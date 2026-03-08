@@ -1,0 +1,7 @@
+{
+  "node_version": "20",
+  "graphs": {
+    "ticket_to_todo": "./electron/services/langchain/graphs/ticket-to-todo/studio.ts:graph"
+  },
+  "env": ".env"
+}

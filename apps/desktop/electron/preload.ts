@@ -12,11 +12,16 @@ import {
   type CliRunRequest,
   type CliRunResponse,
   type FlowCancelRequest,
-  type FlowEvent,
   type FlowInvokeRequest,
   type FlowInvokeResponse,
+  type FlowState,
   type GitDiffRequest,
-  type GitDiffResponse
+  type GitDiffResponse,
+  type TodoFlowAllStatesResponse,
+  type TodoFlowBackendState,
+  type TodoFlowExecuteAllRequest,
+  type TodoFlowStartRequest,
+  type TodoFlowStartResponse
 } from "../shared/ipc";
 
 const api: AtlasDesktopApi = {
@@ -55,16 +60,26 @@ const api: AtlasDesktopApi = {
   cancelFlow(request: FlowCancelRequest): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.flowCancel, request);
   },
-  onFlowEvent(listener: (event: FlowEvent) => void) {
-    const wrapped = (_event: Electron.IpcRendererEvent, payload: FlowEvent) => {
-      listener(payload);
-    };
-
-    ipcRenderer.on(IPC_CHANNELS.flowEvent, wrapped);
-
-    return () => {
-      ipcRenderer.removeListener(IPC_CHANNELS.flowEvent, wrapped);
-    };
+  getFlowState(): Promise<FlowState> {
+    return ipcRenderer.invoke(IPC_CHANNELS.flowGetState);
+  },
+  resetFlow(): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.flowReset);
+  },
+  startTodoFlow(request: TodoFlowStartRequest): Promise<TodoFlowStartResponse> {
+    return ipcRenderer.invoke(IPC_CHANNELS.todoFlowStart, request);
+  },
+  getTodoFlowState(todoId: string): Promise<TodoFlowBackendState | null> {
+    return ipcRenderer.invoke(IPC_CHANNELS.todoFlowGetState, todoId);
+  },
+  cancelTodoFlow(todoId: string): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.todoFlowCancel, todoId);
+  },
+  executeAllTodoFlows(request: TodoFlowExecuteAllRequest): Promise<{ status: string }> {
+    return ipcRenderer.invoke(IPC_CHANNELS.todoFlowExecuteAll, request);
+  },
+  getAllTodoFlowStates(): Promise<TodoFlowAllStatesResponse> {
+    return ipcRenderer.invoke(IPC_CHANNELS.todoFlowGetAllStates);
   }
 };
 

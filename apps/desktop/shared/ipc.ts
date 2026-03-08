@@ -1,5 +1,6 @@
 // 렌더러 → 메인: CLI 실행 요청/취소, 인증 상태 조회, git diff 조회, 앱 설정 관리
-// 렌더러 → 메인: LangChain 플로우 실행/취소 및 이벤트 스트림
+// 렌더러 → 메인: 백그라운드 플로우 실행/취소 및 상태 폴링
+// 렌더러 → 메인: Todo 단위 실행 플로우 시작/상태 조회
 export const IPC_CHANNELS = {
   cliRun: "cli:run",
   cliCancel: "cli:cancel",
@@ -7,7 +8,13 @@ export const IPC_CHANNELS = {
   cliAuthStatus: "cli:auth-status",
   flowInvoke: "flow:invoke",
   flowCancel: "flow:cancel",
-  flowEvent: "flow:event",
+  flowGetState: "flow:get-state",
+  flowReset: "flow:reset",
+  todoFlowStart: "todo-flow:start",
+  todoFlowGetState: "todo-flow:get-state",
+  todoFlowCancel: "todo-flow:cancel",
+  todoFlowExecuteAll: "todo-flow:execute-all",
+  todoFlowGetAllStates: "todo-flow:get-all-states",
   gitDiff: "git:diff",
   configGet: "config:get",
   configUpdate: "config:update"
@@ -17,6 +24,18 @@ export const IPC_CHANNELS = {
 
 export type ProviderType = "claude" | "codex";
 
+// ─── CLI Conversation ───────────────────────────────────
+
+// 목적: 세션 이어쓰기/재개/신규 시작 정책을 정의한다.
+export type CliConversationMode = "new" | "continue-last" | "resume-id";
+
+export interface CliConversationOptions {
+  mode?: CliConversationMode;
+  sessionId?: string;
+  forkOnResume?: boolean;
+  ephemeral?: boolean;
+}
+
 // ─── CLI Run (정규화) ───────────────────────────────────
 
 export interface CliRunRequest {
@@ -24,6 +43,7 @@ export interface CliRunRequest {
   provider: ProviderType;
   prompt: string;
   cwd?: string;
+  conversation?: CliConversationOptions;
 }
 
 export interface CliRunResponse {
@@ -139,6 +159,23 @@ export interface CliSessionResult {
   numTurns?: number;
 }
 
+export interface ToolTimelineEntry {
+  id: string;
+  toolName: string;
+  input: Record<string, unknown>;
+  result?: string;
+  timestamp: number;
+  completedAt?: number;
+}
+
+export interface TerminalLog {
+  status: "completed" | "failed";
+  output: string;
+  stderr: string;
+  error?: string;
+  toolTimeline: ToolTimelineEntry[];
+}
+
 // 목적: provider에 관계없이 렌더러가 소비하는 정규화된 이벤트 union
 export type CliEvent =
   | { requestId: string; provider: ProviderType; phase: "started"; pid: number; timestamp: number }
@@ -146,6 +183,7 @@ export type CliEvent =
   | { requestId: string; provider: ProviderType; phase: "tool-use"; tool: CliToolUse; timestamp: number }
   | { requestId: string; provider: ProviderType; phase: "tool-result"; toolResult: CliToolResult; timestamp: number }
   | { requestId: string; provider: ProviderType; phase: "result"; result: CliSessionResult; timestamp: number }
+  | { requestId: string; provider: ProviderType; phase: "parse-error"; rawLine: string; error: string; timestamp: number }
   | { requestId: string; provider: ProviderType; phase: "stderr"; chunk: string; timestamp: number }
   | { requestId: string; provider: ProviderType; phase: "completed"; exitCode: number; signal: NodeJS.Signals | null; timestamp: number }
   | { requestId: string; provider: ProviderType; phase: "failed"; error: string; timestamp: number }
@@ -189,8 +227,8 @@ export interface GitDiffResponse {
 // ─── App Settings ───────────────────────────────────────
 
 // 목적: provider 간 공통 권한 모드를 정의한다.
-// auto: 모든 도구 권한을 자동 승인 (Claude: bypassPermissions, Codex: never)
-// manual: 사용자 확인 후 실행 (Claude: default, Codex: on-request)
+// auto: 모든 도구 권한을 자동 승인 (Claude: bypassPermissions, Codex: --full-auto)
+// manual: 사용자 확인 후 실행 (Claude: default, Codex: 기본 동작)
 export type CliPermissionMode = "auto" | "manual";
 
 export interface CliSettings {
@@ -211,10 +249,19 @@ export interface PipelineState {
   activityLog: ActivityLogEntry[];
 }
 
+// 목적: LangSmith 추적 설정을 정의한다.
+export interface TracingSettings {
+  enabled: boolean;
+  apiKey: string;
+  project: string;
+  endpoint: string;
+}
+
 export interface AppSettings {
   defaultCwd: string;
   activeProvider: ProviderType;
   cli: CliSettings;
+  tracing?: TracingSettings;
   ticket?: Ticket;
   todos?: TodoItem[];
   pipeline?: PipelineState;
@@ -231,7 +278,7 @@ export interface AppSettingsUpdateRequest {
 
 // ─── LangChain Flow ─────────────────────────────────────
 
-export type FlowType = "prompt" | "ticket-to-todo";
+export type FlowType = "prompt" | "ticket-to-todo" | "todo-execution";
 
 export interface FlowInvokeRequest {
   flowId: string;
@@ -253,23 +300,38 @@ export interface FlowCancelRequest {
   flowId: string;
 }
 
-export interface FlowMetadata {
-  costUsd?: number;
-  durationMs?: number;
-  numTurns?: number;
+// ─── Background Flow State ──────────────────────────────
+// 목적: 메인 프로세스가 관리하는 플로우 실행 상태. 렌더러는 이 타입을 폴링한다.
+// idle: 대기, running: 실행 중, completed: 완료, error: 오류, interrupted: 앱 강제 종료로 중단
+
+export type FlowRunStatus = "idle" | "running" | "completed" | "error" | "interrupted";
+
+export interface FlowNodeProgress {
+  nodeName: string;
+  status: "running" | "completed" | "error";
+  startedAt: number;
+  endedAt?: number;
+  error?: string;
 }
 
-// 목적: LangChain 플로우 실행 과정을 렌더러에서 시각화하기 위한 이벤트 union
-// flow-start/flow-end: 전체 플로우 수명
-// node-start/node-stream/node-end/node-error: 개별 노드(LLM 호출 등) 수명
-export type FlowEvent =
-  | { flowId: string; type: "flow-start"; timestamp: number }
-  | { flowId: string; type: "node-start"; nodeId: string; nodeName: string; input: string; timestamp: number }
-  | { flowId: string; type: "node-stream"; nodeId: string; chunk: string; timestamp: number }
-  | { flowId: string; type: "node-end"; nodeId: string; output: string; metadata?: FlowMetadata; timestamp: number }
-  | { flowId: string; type: "node-error"; nodeId: string; error: string; timestamp: number }
-  | { flowId: string; type: "flow-end"; result: string; metadata?: FlowMetadata; timestamp: number }
-  | { flowId: string; type: "flow-error"; error: string; timestamp: number };
+export interface FlowState {
+  flowId: string | null;
+  flowType: FlowType | null;
+  status: FlowRunStatus;
+  startedAt: number | null;
+  endedAt: number | null;
+  error: string | null;
+  nodeProgress: FlowNodeProgress[];
+  currentPhase: PipelinePhase;
+  holdAtPhase?: PipelinePhase;
+  dorFormalResult?: "pass" | "hold";
+  dorFormalReason?: string;
+  dorSemanticResult?: "proceed" | "hold";
+  dorSemanticReason?: string;
+  todos: TodoItem[];
+  holdReason?: string;
+  activityLog: ActivityLogEntry[];
+}
 
 // ─── Ticket (지라 이슈 정규화) ─────────────────────────────
 // 목적: 지라 이슈를 정규화한 Ticket과 하위 구조(AC, 시나리오)를 정의한다.
@@ -333,6 +395,29 @@ export interface TodoList {
   items: TodoItem[];
 }
 
+// ─── Todo 실행 플로우 ────────────────────────────────────────
+// 목적: Todo 1개의 독립 실행 플로우 단계를 정의한다.
+// workorder → explore → execute → verify → dod
+
+export type TodoFlowPhase = "workorder" | "explore" | "execute" | "verify" | "dod";
+export type TodoFlowStatus = "idle" | "running" | "completed" | "error";
+
+export interface TodoFlowStepState {
+  phase: TodoFlowPhase;
+  status: TodoFlowStatus;
+  startedAt: number | null;
+  endedAt: number | null;
+  result: Record<string, unknown> | null;
+  error: string | null;
+}
+
+export interface TodoFlowState {
+  todoId: string;
+  status: TodoFlowStatus;
+  currentPhase: TodoFlowPhase | null;
+  steps: TodoFlowStepState[];
+}
+
 // ─── Pipeline Phase ────────────────────────────────────────
 // 목적: 전체 파이프라인의 각 단계를 정의한다.
 // 현재 Ticket→Todo 변환은 intake → dor → plan 까지 사용한다.
@@ -350,7 +435,47 @@ export interface ActivityLogEntry {
   type: "info" | "success" | "warning" | "error";
 }
 
-// ─── WorkOrder (향후 실행 단계용, 현재 미사용) ──────────────
+// ─── Todo 실행 플로우 IPC ───────────────────────────────────
+// 렌더러 → 메인: Todo 단위 실행 요청/취소/상태 조회
+
+export interface TodoFlowStartRequest {
+  todoId: string;
+  provider: ProviderType;
+  cwd?: string;
+  /** 목적: 중간 재시작 시 특정 노드부터 실행한다. */
+  startFromNode?: string;
+}
+
+export interface TodoFlowExecuteAllRequest {
+  provider: ProviderType;
+  cwd?: string;
+}
+
+export interface TodoFlowStartResponse {
+  status: "accepted" | "rejected";
+  todoId: string;
+  message?: string;
+}
+
+// 목적: 메인 프로세스가 관리하는 Todo별 백그라운드 실행 상태.
+// 렌더러는 todoId로 개별 Todo의 상태를 폴링한다.
+export interface TodoFlowBackendState {
+  todoId: string;
+  status: TodoFlowStatus;
+  currentPhase: TodoFlowPhase | null;
+  steps: TodoFlowStepState[];
+  workOrder: Record<string, unknown> | null;
+  evidence: Record<string, unknown> | null;
+  finalVerdict: "done" | "retry" | "hold" | null;
+  error: string | null;
+  startedAt: number | null;
+  endedAt: number | null;
+}
+
+// 목적: 모든 Todo의 실행 상태를 일괄 반환한다.
+export type TodoFlowAllStatesResponse = Record<string, TodoFlowBackendState>;
+
+// ─── WorkOrder (Atlas 7-Section + 운영 메타데이터) ──────────────
 // 목적: Atlas 7-Section + 운영 메타데이터. Todo 실행 시 Orchestrator가 생성한다.
 
 export interface WorkOrderScope {
@@ -359,19 +484,68 @@ export interface WorkOrderScope {
 }
 
 export interface WorkOrder {
+  schema_version: string;
   wo_id: string;
   task: string;
   expected_outcome: string;
+  required_tools: string[];
   must_do: string[];
   must_not: string[];
   scope: WorkOrderScope;
   verify_cmd: string;
   evidence_required: string[];
   mode: WorkOrderMode;
+  escalation_policy: "fast" | "standard" | "strict";
+  timeout_seconds: number;
   attempt: { n: number; max: number };
   frozen: boolean;
   origin_todo_id: string;
   retry_of_wo_id: string | null;
+}
+
+// ─── Evidence / ContextPack / ImplReport ────────────────────
+// 목적: Todo 실행 그래프의 노드별 산출물 타입. UI와 백엔드 양쪽에서 사용한다.
+
+// 목적: Verifier가 생성하고, DoDHook이 evidence_required 충족 여부를 검증한다.
+export interface Evidence {
+  verdict: "PASS" | "FAIL";
+  evidence: {
+    test_pass_log: string | null;
+    lint_clean: boolean | null;
+    coverage_pct: number | null;
+    regression_check: boolean | null;
+    exit_code: number | null;
+  };
+  scope_violations: string[];
+  failure_summary: {
+    symptom: string;
+    likely_cause: string;
+    next_hypothesis: string;
+    suggested_next_step: string;
+  } | null;
+  terminal?: TerminalLog;
+}
+
+// 목적: Explorer가 생성하는 Context Pack.
+export interface ContextPack {
+  relevant_files: string[];
+  test_files: string[];
+  scope_suggestion: {
+    editable_paths: string[];
+    forbidden_paths: string[];
+  };
+  notes: string;
+  terminal?: TerminalLog;
+}
+
+// 목적: Implementer가 생성하는 Implementation Report.
+export interface ImplReport {
+  changes: Array<{ path: string; action: string; diff_summary: string }>;
+  scope_violations: string[];
+  tests_added: string[];
+  notes: string;
+  terminal?: TerminalLog;
+  diff?: GitDiffResponse | null;
 }
 
 // ─── Desktop API (preload → renderer) ───────────────────
@@ -384,7 +558,13 @@ export interface AtlasDesktopApi {
   onCliEvent(listener: (event: CliEvent) => void): () => void;
   invokeFlow(request: FlowInvokeRequest): Promise<FlowInvokeResponse>;
   cancelFlow(request: FlowCancelRequest): Promise<void>;
-  onFlowEvent(listener: (event: FlowEvent) => void): () => void;
+  getFlowState(): Promise<FlowState>;
+  resetFlow(): Promise<void>;
+  startTodoFlow(request: TodoFlowStartRequest): Promise<TodoFlowStartResponse>;
+  getTodoFlowState(todoId: string): Promise<TodoFlowBackendState | null>;
+  cancelTodoFlow(todoId: string): Promise<void>;
+  executeAllTodoFlows(request: TodoFlowExecuteAllRequest): Promise<{ status: string }>;
+  getAllTodoFlowStates(): Promise<TodoFlowAllStatesResponse>;
   getConfig(): Promise<AppSettings>;
   updateConfig(request: AppSettingsUpdateRequest): Promise<AppSettings>;
 }

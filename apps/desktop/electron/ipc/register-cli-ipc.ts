@@ -37,12 +37,15 @@ export function registerCliIpc() {
     try {
       // 이유: cancel 요청에는 provider 정보가 없으므로 모든 provider에 시도한다.
       // 각 provider는 requestId가 없으면 not_found를 반환한다.
+      let cancelled = false;
       for (const type of ["claude", "codex"] as const) {
         const provider = getProvider(type);
         const result = provider.cancel(event.sender, request, emitCliEvent);
-        if (result.status === "cancelled") return result;
+        if (result.status === "cancelled") cancelled = true;
       }
-      return { status: "not_found" as const, requestId: request.requestId };
+      return cancelled
+        ? { status: "cancelled" as const, requestId: request.requestId }
+        : { status: "not_found" as const, requestId: request.requestId };
     } catch (error) {
       console.error("[ipc] cli:cancel exception", error);
       throw error;

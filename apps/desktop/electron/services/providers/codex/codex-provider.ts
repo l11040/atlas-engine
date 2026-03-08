@@ -1,27 +1,22 @@
 // 책임: Codex CLI를 CliProvider 인터페이스로 구현한다.
 
 import { app } from "electron";
-import { spawn, type ChildProcessByStdio } from "node:child_process";
-import { access } from "node:fs/promises";
-import path from "node:path";
-import type { Readable } from "node:stream";
+import { spawn } from "node:child_process";
+import { startCliSession, type CliSessionHandle } from "@atlas/cli-runtime";
 import type {
   CliAuthCheckRequest,
   CliAuthStatusResponse,
   CliAuthStatus,
   CliCancelRequest,
   CliCancelResponse,
-  CliEvent,
   CliRunRequest,
   CliRunResponse
 } from "../../../../shared/ipc";
 import { getSettings } from "../../config/settings";
 import type { CliProvider, EmitCliEvent } from "../types";
-import { createJsonlParser } from "./jsonl-parser";
-import { createCodexNormalizer } from "./normalizer";
+import { toIpcCliEvent } from "../cli-event-adapter";
 
-type CodexChildProcess = ChildProcessByStdio<null, Readable, Readable>;
-const runningJobs = new Map<string, CodexChildProcess>();
+const runningJobs = new Map<string, CliSessionHandle>();
 
 const DEBUG = process.env.ATLAS_DEBUG_CODEX === "1";
 function log(...args: unknown[]) {
@@ -41,128 +36,28 @@ function run(target: Electron.WebContents, request: CliRunRequest, emit: EmitCli
   }
 
   const settings = getSettings();
-
-  // 주의: stdin을 ignore로 고정해 CLI가 입력 대기 상태로 멈추는 현상을 방지한다.
-  // 목적: 공통 permissionMode를 Codex CLI의 실행 옵션으로 매핑한다.
-  const args = ["exec", "--json", "--skip-git-repo-check"];
-  if (settings.cli.permissionMode === "auto") {
-    args.push("--full-auto");
-  }
-  args.push(request.prompt);
-
-  const child = spawn(
-    "codex",
-    args,
-    {
-      cwd: request.cwd || settings.defaultCwd || process.cwd() || app.getPath("home"),
-      shell: false,
-      stdio: ["ignore", "pipe", "pipe"]
-    }
-  );
-
-  runningJobs.set(request.requestId, child);
-
-  emit(target, {
+  const session = startCliSession({
     requestId: request.requestId,
     provider: "codex",
-    phase: "started",
-    pid: child.pid ?? -1,
-    timestamp: Date.now()
-  });
-
-  let stderr = "";
-  let settled = false;
-
-  // 목적: 세션별 상태 기반 normalizer를 생성하여 item.started/completed 간 ID를 추적한다.
-  const normalizeCodexEvent = createCodexNormalizer();
-
-  const parser = createJsonlParser(
-    (rawEvent) => {
-      for (const event of normalizeCodexEvent(request.requestId, rawEvent)) {
-        emit(target, event);
-      }
+    prompt: request.prompt,
+    cwd: request.cwd || settings.defaultCwd || process.cwd() || app.getPath("home"),
+    permissionMode: settings.cli.permissionMode,
+    timeoutMs: settings.cli.timeoutMs,
+    conversation: request.conversation,
+    promptTransport: "auto",
+    // 이유: 사용자 실행 세션은 도구 사용이 기본 요구사항이다.
+    allowTools: true,
+    onEvent: (event) => {
+      emit(target, toIpcCliEvent(event));
     },
-    (rawLine, error) => {
+    onParseError: ({ rawLine, error }) => {
       console.warn("[codex-provider] JSONL 파싱 실패:", rawLine.slice(0, 200), error.message);
     }
-  );
-
-  child.stdout.on("data", (chunk) => {
-    parser.feed(chunk.toString());
   });
 
-  child.stderr.on("data", (chunk) => {
-    const text = chunk.toString();
-    stderr += text;
-    emit(target, {
-      requestId: request.requestId,
-      provider: "codex",
-      phase: "stderr",
-      chunk: text,
-      timestamp: Date.now()
-    });
-  });
-
-  const timeout = setTimeout(() => {
-    if (settled) return;
-    settled = true;
+  runningJobs.set(request.requestId, session);
+  void session.result.finally(() => {
     runningJobs.delete(request.requestId);
-    child.kill("SIGTERM");
-    emit(target, {
-      requestId: request.requestId,
-      provider: "codex",
-      phase: "failed",
-      error: "Codex response timed out",
-      timestamp: Date.now()
-    });
-  }, settings.cli.timeoutMs);
-
-  child.once("error", (error) => {
-    if (settled) return;
-    settled = true;
-    clearTimeout(timeout);
-    runningJobs.delete(request.requestId);
-
-    const friendlyError =
-      (error as NodeJS.ErrnoException).code === "ENOENT" ? "codex command was not found in PATH" : error.message;
-
-    emit(target, {
-      requestId: request.requestId,
-      provider: "codex",
-      phase: "failed",
-      error: friendlyError,
-      timestamp: Date.now()
-    });
-  });
-
-  child.once("close", (exitCode, signal) => {
-    if (settled) return;
-    settled = true;
-    clearTimeout(timeout);
-    parser.flush();
-
-    if (!runningJobs.has(request.requestId)) return;
-    runningJobs.delete(request.requestId);
-
-    if ((exitCode ?? 0) !== 0) {
-      emit(target, {
-        requestId: request.requestId,
-        provider: "codex",
-        phase: "failed",
-        error: stderr.trim() || `Codex exited with code ${exitCode ?? -1}`,
-        timestamp: Date.now()
-      });
-      return;
-    }
-
-    emit(target, {
-      requestId: request.requestId,
-      provider: "codex",
-      phase: "completed",
-      exitCode: exitCode ?? -1,
-      signal,
-      timestamp: Date.now()
-    });
   });
 
   return { status: "accepted", requestId: request.requestId };
@@ -170,21 +65,15 @@ function run(target: Electron.WebContents, request: CliRunRequest, emit: EmitCli
 
 // ─── Cancel ─────────────────────────────────────────────
 
-function cancel(target: Electron.WebContents, request: CliCancelRequest, emit: EmitCliEvent): CliCancelResponse {
+function cancel(_target: Electron.WebContents, request: CliCancelRequest, _emit: EmitCliEvent): CliCancelResponse {
   const running = runningJobs.get(request.requestId);
   if (!running) {
     return { status: "not_found", requestId: request.requestId };
   }
 
   runningJobs.delete(request.requestId);
-  running.kill("SIGTERM");
-
-  emit(target, {
-    requestId: request.requestId,
-    provider: "codex",
-    phase: "cancelled",
-    timestamp: Date.now()
-  });
+  // 목적: 취소 이벤트 발행은 core runtime에서 수행한다.
+  running.cancel();
 
   return { status: "cancelled", requestId: request.requestId };
 }
@@ -195,80 +84,102 @@ function makeAuthResponse(status: CliAuthStatus, message: string): CliAuthStatus
   return { provider: "codex", status, message, checkedAt: Date.now() };
 }
 
-// 목적: 1단계 - ~/.codex/auth.json 존재 여부로 인증 여부를 빠르게 판별한다.
-async function checkLocalAuth(home: string): Promise<CliAuthStatusResponse | null> {
-  try {
-    await access(path.join(home, ".codex", "auth.json"));
-    return makeAuthResponse("authenticated", "Codex CLI 사용 가능, 인증 완료");
-  } catch {
-    // 이유: 파일이 없으면 환경변수 + 런타임 체크로 넘어간다.
-  }
-  return null;
+interface AuthCommandResult {
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+  spawnError?: NodeJS.ErrnoException;
 }
 
-// 목적: 2단계 - 환경변수와 CLI 존재 여부로 인증 상태를 판별한다.
-function runRuntimeCheck(timeoutMs: number): Promise<CliAuthStatusResponse> {
-  log("auth check start", { timeoutMs });
-
+function runAuthCommand(args: string[], timeoutMs: number): Promise<AuthCommandResult> {
   return new Promise((resolve) => {
-    const child = spawn("codex", ["--version"], { shell: false, stdio: ["ignore", "pipe", "pipe"] });
-
+    const child = spawn("codex", args, { shell: false, stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
+    let stderr = "";
     let settled = false;
 
-    const complete = (response: CliAuthStatusResponse) => {
+    const finish = (result: AuthCommandResult) => {
       if (settled) return;
       settled = true;
-      resolve(response);
+      clearTimeout(timer);
+      resolve(result);
     };
 
     const timer = setTimeout(() => {
       child.kill("SIGTERM");
-      complete(makeAuthResponse("error", "Codex 인증 확인 시간 초과"));
+      finish({ exitCode: null, stdout, stderr, timedOut: true });
     }, timeoutMs);
 
     child.stdout.on("data", (chunk) => {
       stdout += chunk.toString();
     });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
 
     child.once("error", (error) => {
-      clearTimeout(timer);
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        log("auth check cli missing");
-        complete(makeAuthResponse("cli_missing", "codex 명령어를 PATH에서 찾을 수 없음"));
-        return;
-      }
-      complete(makeAuthResponse("error", error.message));
+      finish({
+        exitCode: null,
+        stdout,
+        stderr,
+        timedOut: false,
+        spawnError: error as NodeJS.ErrnoException
+      });
     });
 
     child.once("close", (exitCode) => {
-      clearTimeout(timer);
-
-      if (exitCode !== 0) {
-        complete(makeAuthResponse("error", `Codex CLI 확인 실패 (종료 코드 ${exitCode ?? -1})`));
-        return;
-      }
-
-      // 목적: CLI는 존재하므로 환경변수로 인증 여부를 판별한다.
-      const hasKey = !!(process.env.OPENAI_API_KEY || process.env.CODEX_API_KEY);
-      if (hasKey) {
-        log("auth check authenticated via env key");
-        complete(makeAuthResponse("authenticated", "Codex CLI 사용 가능, 인증 완료"));
-      } else {
-        log("auth check unauthenticated");
-        complete(makeAuthResponse("unauthenticated", "Codex CLI 설치됨, 로그인 필요"));
-      }
+      finish({ exitCode: exitCode ?? null, stdout, stderr, timedOut: false });
     });
   });
 }
 
+function classifyLoginStatus(raw: string): "authenticated" | "unauthenticated" | "unknown" {
+  const lowered = raw.toLowerCase();
+  if (lowered.includes("logged in")) return "authenticated";
+  if (lowered.includes("not logged in") || lowered.includes("log in")) return "unauthenticated";
+  return "unknown";
+}
+
+// 목적: codex login status로 인증 여부를 판별한다.
+async function runRuntimeCheck(timeoutMs: number): Promise<CliAuthStatusResponse> {
+  log("auth check start", { timeoutMs });
+  const result = await runAuthCommand(["login", "status"], timeoutMs);
+
+  if (result.timedOut) {
+    return makeAuthResponse("error", "Codex 인증 확인 시간 초과");
+  }
+
+  if (result.spawnError) {
+    if (result.spawnError.code === "ENOENT") {
+      log("auth check cli missing");
+      return makeAuthResponse("cli_missing", "codex 명령어를 PATH에서 찾을 수 없음");
+    }
+    return makeAuthResponse("error", result.spawnError.message);
+  }
+
+  const combined = `${result.stdout}\n${result.stderr}`;
+  const status = classifyLoginStatus(combined);
+  if (status === "authenticated") {
+    return makeAuthResponse("authenticated", "Codex CLI 사용 가능, 인증 완료");
+  }
+  if (status === "unauthenticated") {
+    return makeAuthResponse("unauthenticated", "Codex CLI 설치됨, 로그인 필요");
+  }
+
+  if ((result.exitCode ?? 0) === 0) {
+    // 이유: 출력 형식이 바뀌어도 login status가 성공 종료면 인증된 것으로 간주한다.
+    return makeAuthResponse("authenticated", "Codex CLI 사용 가능, 인증 완료");
+  }
+
+  return makeAuthResponse(
+    "error",
+    result.stderr.trim() || result.stdout.trim() || `Codex 인증 상태 확인 실패 (종료 코드 ${result.exitCode ?? -1})`
+  );
+}
+
 async function checkAuth(request: CliAuthCheckRequest): Promise<CliAuthStatusResponse> {
   const timeoutMs = request.timeoutMs ?? 10000;
-  const home = app.getPath("home");
-
-  const localResult = await checkLocalAuth(home);
-  if (localResult) return localResult;
-
   return runRuntimeCheck(timeoutMs);
 }
 
