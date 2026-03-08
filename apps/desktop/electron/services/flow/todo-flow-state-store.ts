@@ -155,22 +155,6 @@ export class TodoFlowStateStore {
     }
   }
 
-  // 목적: 특정 Todo의 상태를 초기화한다.
-  async resetState(todoId: string): Promise<void> {
-    this.states.delete(todoId);
-    const db = getAppDatabase();
-    db.prepare("DELETE FROM todo_flow_states WHERE todo_id = ?").run(todoId);
-    db.prepare("DELETE FROM todo_flow_activity WHERE todo_id = ?").run(todoId);
-  }
-
-  // 목적: 전체 상태를 초기화한다.
-  async resetAll(): Promise<void> {
-    this.states.clear();
-    const db = getAppDatabase();
-    db.exec("DELETE FROM todo_flow_states;");
-    db.exec("DELETE FROM todo_flow_activity;");
-  }
-
   // ─── SQLite ───────────────────────────────────────────
 
   private persistTodoState(todoId: string): void {
