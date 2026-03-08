@@ -16,6 +16,7 @@ import { CliLlm } from "../langchain/cli-llm";
 import { buildTicketToTodoGraph } from "../langchain/graphs/ticket-to-todo";
 import { applyTracingEnv, clearTracingEnv } from "../langchain/tracing-env";
 import { FlowStateStore, INITIAL_FLOW_STATE } from "./flow-state-store";
+import type { TodoFlowService } from "./todo-flow-service";
 
 // 목적: 그래프 노드 이름을 PipelinePhase에 매핑한다.
 const NODE_PHASE_MAP: Record<string, string> = {
@@ -29,6 +30,12 @@ const NODE_PHASE_MAP: Record<string, string> = {
 export class BackgroundFlowService {
   private store = new FlowStateStore();
   private abortController: AbortController | null = null;
+  private todoFlowService: TodoFlowService | null = null;
+
+  // 목적: TodoFlowService 참조를 설정한다. 순환 의존 방지를 위해 setter로 주입한다.
+  setTodoFlowService(service: TodoFlowService): void {
+    this.todoFlowService = service;
+  }
 
   // 목적: 앱 시작 시 디스크에서 상태를 복원하고, running 상태를 interrupted로 마킹한다.
   async initialize(): Promise<void> {
@@ -223,11 +230,32 @@ export class BackgroundFlowService {
         }
       }
 
-      await this.store.update({
-        status: "completed",
-        endedAt: Date.now()
-      });
       await this.savePipelineToSettings();
+
+      // 목적: ticket-to-todo 완료 후, todos가 있으면 자동으로 todo execution을 시작한다.
+      // 이유: 파이프라인을 하나로 묶어 done까지 자동 도달하도록 한다.
+      const currentState = this.store.getSnapshot();
+      const todos = currentState.todos;
+      if (this.todoFlowService && todos.length > 0 && currentState.currentPhase !== "hold") {
+        const todoResult = await this.todoFlowService.executeAll(
+          request.provider,
+          request.cwd
+        );
+
+        // 목적: 전체 todo 완료 시 done, 부분 실패 시에도 done(에러 정보는 개별 todo에 저장).
+        await this.store.update({
+          currentPhase: "done" as PipelinePhase,
+          status: "completed",
+          endedAt: Date.now()
+        });
+        await this.savePipelineToSettings();
+      } else {
+        // 이유: todos가 없거나 hold 상태이면 ticket-to-todo 결과만으로 완료 처리한다.
+        await this.store.update({
+          status: "completed",
+          endedAt: Date.now()
+        });
+      }
     } catch (error) {
       await this.store.update({
         status: "error",

@@ -1,5 +1,6 @@
 // 렌더러 → 메인: CLI 실행 요청/취소, 인증 상태 조회, git diff 조회, 앱 설정 관리
 // 렌더러 → 메인: 백그라운드 플로우 실행/취소 및 상태 폴링
+// 렌더러 → 메인: Todo 단위 실행 플로우 시작/상태 조회
 export const IPC_CHANNELS = {
   cliRun: "cli:run",
   cliCancel: "cli:cancel",
@@ -9,6 +10,11 @@ export const IPC_CHANNELS = {
   flowCancel: "flow:cancel",
   flowGetState: "flow:get-state",
   flowReset: "flow:reset",
+  todoFlowStart: "todo-flow:start",
+  todoFlowGetState: "todo-flow:get-state",
+  todoFlowCancel: "todo-flow:cancel",
+  todoFlowExecuteAll: "todo-flow:execute-all",
+  todoFlowGetAllStates: "todo-flow:get-all-states",
   gitDiff: "git:diff",
   configGet: "config:get",
   configUpdate: "config:update"
@@ -140,6 +146,23 @@ export interface CliSessionResult {
   numTurns?: number;
 }
 
+export interface ToolTimelineEntry {
+  id: string;
+  toolName: string;
+  input: Record<string, unknown>;
+  result?: string;
+  timestamp: number;
+  completedAt?: number;
+}
+
+export interface TerminalLog {
+  status: "completed" | "failed";
+  output: string;
+  stderr: string;
+  error?: string;
+  toolTimeline: ToolTimelineEntry[];
+}
+
 // 목적: provider에 관계없이 렌더러가 소비하는 정규화된 이벤트 union
 export type CliEvent =
   | { requestId: string; provider: ProviderType; phase: "started"; pid: number; timestamp: number }
@@ -241,7 +264,7 @@ export interface AppSettingsUpdateRequest {
 
 // ─── LangChain Flow ─────────────────────────────────────
 
-export type FlowType = "prompt" | "ticket-to-todo";
+export type FlowType = "prompt" | "ticket-to-todo" | "todo-execution";
 
 export interface FlowInvokeRequest {
   flowId: string;
@@ -358,6 +381,29 @@ export interface TodoList {
   items: TodoItem[];
 }
 
+// ─── Todo 실행 플로우 ────────────────────────────────────────
+// 목적: Todo 1개의 독립 실행 플로우 단계를 정의한다.
+// workorder → explore → execute → verify → dod
+
+export type TodoFlowPhase = "workorder" | "explore" | "execute" | "verify" | "dod";
+export type TodoFlowStatus = "idle" | "running" | "completed" | "error";
+
+export interface TodoFlowStepState {
+  phase: TodoFlowPhase;
+  status: TodoFlowStatus;
+  startedAt: number | null;
+  endedAt: number | null;
+  result: Record<string, unknown> | null;
+  error: string | null;
+}
+
+export interface TodoFlowState {
+  todoId: string;
+  status: TodoFlowStatus;
+  currentPhase: TodoFlowPhase | null;
+  steps: TodoFlowStepState[];
+}
+
 // ─── Pipeline Phase ────────────────────────────────────────
 // 목적: 전체 파이프라인의 각 단계를 정의한다.
 // 현재 Ticket→Todo 변환은 intake → dor → plan 까지 사용한다.
@@ -375,7 +421,47 @@ export interface ActivityLogEntry {
   type: "info" | "success" | "warning" | "error";
 }
 
-// ─── WorkOrder (향후 실행 단계용, 현재 미사용) ──────────────
+// ─── Todo 실행 플로우 IPC ───────────────────────────────────
+// 렌더러 → 메인: Todo 단위 실행 요청/취소/상태 조회
+
+export interface TodoFlowStartRequest {
+  todoId: string;
+  provider: ProviderType;
+  cwd?: string;
+  /** 목적: 중간 재시작 시 특정 노드부터 실행한다. */
+  startFromNode?: string;
+}
+
+export interface TodoFlowExecuteAllRequest {
+  provider: ProviderType;
+  cwd?: string;
+}
+
+export interface TodoFlowStartResponse {
+  status: "accepted" | "rejected";
+  todoId: string;
+  message?: string;
+}
+
+// 목적: 메인 프로세스가 관리하는 Todo별 백그라운드 실행 상태.
+// 렌더러는 todoId로 개별 Todo의 상태를 폴링한다.
+export interface TodoFlowBackendState {
+  todoId: string;
+  status: TodoFlowStatus;
+  currentPhase: TodoFlowPhase | null;
+  steps: TodoFlowStepState[];
+  workOrder: Record<string, unknown> | null;
+  evidence: Record<string, unknown> | null;
+  finalVerdict: "done" | "retry" | "hold" | null;
+  error: string | null;
+  startedAt: number | null;
+  endedAt: number | null;
+}
+
+// 목적: 모든 Todo의 실행 상태를 일괄 반환한다.
+export type TodoFlowAllStatesResponse = Record<string, TodoFlowBackendState>;
+
+// ─── WorkOrder (Atlas 7-Section + 운영 메타데이터) ──────────────
 // 목적: Atlas 7-Section + 운영 메타데이터. Todo 실행 시 Orchestrator가 생성한다.
 
 export interface WorkOrderScope {
@@ -384,19 +470,68 @@ export interface WorkOrderScope {
 }
 
 export interface WorkOrder {
+  schema_version: string;
   wo_id: string;
   task: string;
   expected_outcome: string;
+  required_tools: string[];
   must_do: string[];
   must_not: string[];
   scope: WorkOrderScope;
   verify_cmd: string;
   evidence_required: string[];
   mode: WorkOrderMode;
+  escalation_policy: "fast" | "standard" | "strict";
+  timeout_seconds: number;
   attempt: { n: number; max: number };
   frozen: boolean;
   origin_todo_id: string;
   retry_of_wo_id: string | null;
+}
+
+// ─── Evidence / ContextPack / ImplReport ────────────────────
+// 목적: Todo 실행 그래프의 노드별 산출물 타입. UI와 백엔드 양쪽에서 사용한다.
+
+// 목적: Verifier가 생성하고, DoDHook이 evidence_required 충족 여부를 검증한다.
+export interface Evidence {
+  verdict: "PASS" | "FAIL";
+  evidence: {
+    test_pass_log: string | null;
+    lint_clean: boolean | null;
+    coverage_pct: number | null;
+    regression_check: boolean | null;
+    exit_code: number | null;
+  };
+  scope_violations: string[];
+  failure_summary: {
+    symptom: string;
+    likely_cause: string;
+    next_hypothesis: string;
+    suggested_next_step: string;
+  } | null;
+  terminal?: TerminalLog;
+}
+
+// 목적: Explorer가 생성하는 Context Pack.
+export interface ContextPack {
+  relevant_files: string[];
+  test_files: string[];
+  scope_suggestion: {
+    editable_paths: string[];
+    forbidden_paths: string[];
+  };
+  notes: string;
+  terminal?: TerminalLog;
+}
+
+// 목적: Implementer가 생성하는 Implementation Report.
+export interface ImplReport {
+  changes: Array<{ path: string; action: string; diff_summary: string }>;
+  scope_violations: string[];
+  tests_added: string[];
+  notes: string;
+  terminal?: TerminalLog;
+  diff?: GitDiffResponse | null;
 }
 
 // ─── Desktop API (preload → renderer) ───────────────────
@@ -411,6 +546,11 @@ export interface AtlasDesktopApi {
   cancelFlow(request: FlowCancelRequest): Promise<void>;
   getFlowState(): Promise<FlowState>;
   resetFlow(): Promise<void>;
+  startTodoFlow(request: TodoFlowStartRequest): Promise<TodoFlowStartResponse>;
+  getTodoFlowState(todoId: string): Promise<TodoFlowBackendState | null>;
+  cancelTodoFlow(todoId: string): Promise<void>;
+  executeAllTodoFlows(request: TodoFlowExecuteAllRequest): Promise<{ status: string }>;
+  getAllTodoFlowStates(): Promise<TodoFlowAllStatesResponse>;
   getConfig(): Promise<AppSettings>;
   updateConfig(request: AppSettingsUpdateRequest): Promise<AppSettings>;
 }

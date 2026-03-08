@@ -8,28 +8,47 @@ import { normalizeStreamJsonEvent } from "../providers/claude/normalizer";
 import { createJsonlParser } from "../providers/codex/jsonl-parser";
 import { createCodexNormalizer } from "../providers/codex/normalizer";
 
+export class CliExecutionError extends Error {
+  events: CliEvent[];
+  exitCode: number | null;
+  stderr: string;
+
+  constructor(message: string, params: { events: CliEvent[]; exitCode: number | null; stderr: string }) {
+    super(message);
+    this.name = "CliExecutionError";
+    this.events = params.events;
+    this.exitCode = params.exitCode;
+    this.stderr = params.stderr;
+  }
+}
+
 export interface CliSpawnOptions {
   provider: ProviderType;
   prompt: string;
   cwd: string;
   permissionMode: CliPermissionMode;
   timeoutMs: number;
+  /** 목적: 에이전트 도구 사용 허용 여부. */
+  allowTools?: boolean;
   signal?: AbortSignal;
 }
 
 // 목적: provider에 따라 CLI 실행 명령어와 인자를 결정한다.
 function buildCommand(options: CliSpawnOptions): { command: string; args: string[] } {
   if (options.provider === "claude") {
-    // 주의: --allowedTools ""로 도구 사용을 차단하여 파일 생성 등 side effect를 방지한다.
-    // 이유: CliLlm은 텍스트 응답만 필요하므로 agent 기능이 불필요하다.
+    const args = [
+      "-p", options.prompt,
+      "--output-format", "stream-json",
+      "--verbose",
+      "--permission-mode", options.permissionMode === "auto" ? "bypassPermissions" : "default"
+    ];
+    // 목적: 기본값은 안전하게 도구 사용 차단, 실행 그래프에서만 명시적으로 허용한다.
+    if (!options.allowTools) {
+      args.push("--allowedTools", "");
+    }
     return {
       command: "claude",
-      args: [
-        "-p", options.prompt,
-        "--output-format", "stream-json",
-        "--verbose",
-        "--allowedTools", ""
-      ]
+      args
     };
   }
 
@@ -109,7 +128,13 @@ export function runCliToCompletion(options: CliSpawnOptions): Promise<CliEvent[]
       if (settled) return;
       settled = true;
       child.kill("SIGTERM");
-      reject(new Error(`CLI response timed out after ${options.timeoutMs}ms`));
+      reject(
+        new CliExecutionError(`CLI response timed out after ${options.timeoutMs}ms`, {
+          events,
+          exitCode: null,
+          stderr
+        })
+      );
     }, options.timeoutMs);
 
     // 목적: AbortSignal을 통한 외부 취소를 지원한다.
@@ -119,7 +144,13 @@ export function runCliToCompletion(options: CliSpawnOptions): Promise<CliEvent[]
         settled = true;
         clearTimeout(timeout);
         child.kill("SIGTERM");
-        reject(new Error("CLI execution was cancelled"));
+        reject(
+          new CliExecutionError("CLI execution was cancelled", {
+            events,
+            exitCode: null,
+            stderr
+          })
+        );
       }, { once: true });
     }
 
@@ -133,7 +164,13 @@ export function runCliToCompletion(options: CliSpawnOptions): Promise<CliEvent[]
           ? `${command} command was not found in PATH`
           : error.message;
 
-      reject(new Error(friendlyError));
+      reject(
+        new CliExecutionError(friendlyError, {
+          events,
+          exitCode: null,
+          stderr
+        })
+      );
     });
 
     child.once("close", (exitCode) => {
@@ -143,7 +180,17 @@ export function runCliToCompletion(options: CliSpawnOptions): Promise<CliEvent[]
       parser.flush();
 
       if ((exitCode ?? 0) !== 0) {
-        reject(new Error(stderr.trim() || `CLI exited with code ${exitCode ?? -1}`));
+        const lastText = [...events].reverse().find((event) => event.phase === "text");
+        const textHint = lastText && lastText.phase === "text" ? lastText.text.slice(0, 240) : "";
+        const message = stderr.trim()
+          || (textHint ? `CLI exited with code ${exitCode ?? -1}: ${textHint}` : `CLI exited with code ${exitCode ?? -1}`);
+        reject(
+          new CliExecutionError(message, {
+            events,
+            exitCode: exitCode ?? null,
+            stderr
+          })
+        );
         return;
       }
 

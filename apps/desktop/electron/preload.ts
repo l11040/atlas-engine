@@ -16,7 +16,12 @@ import {
   type FlowInvokeResponse,
   type FlowState,
   type GitDiffRequest,
-  type GitDiffResponse
+  type GitDiffResponse,
+  type TodoFlowAllStatesResponse,
+  type TodoFlowBackendState,
+  type TodoFlowExecuteAllRequest,
+  type TodoFlowStartRequest,
+  type TodoFlowStartResponse
 } from "../shared/ipc";
 
 const api: AtlasDesktopApi = {
@@ -60,6 +65,21 @@ const api: AtlasDesktopApi = {
   },
   resetFlow(): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.flowReset);
+  },
+  startTodoFlow(request: TodoFlowStartRequest): Promise<TodoFlowStartResponse> {
+    return ipcRenderer.invoke(IPC_CHANNELS.todoFlowStart, request);
+  },
+  getTodoFlowState(todoId: string): Promise<TodoFlowBackendState | null> {
+    return ipcRenderer.invoke(IPC_CHANNELS.todoFlowGetState, todoId);
+  },
+  cancelTodoFlow(todoId: string): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.todoFlowCancel, todoId);
+  },
+  executeAllTodoFlows(request: TodoFlowExecuteAllRequest): Promise<{ status: string }> {
+    return ipcRenderer.invoke(IPC_CHANNELS.todoFlowExecuteAll, request);
+  },
+  getAllTodoFlowStates(): Promise<TodoFlowAllStatesResponse> {
+    return ipcRenderer.invoke(IPC_CHANNELS.todoFlowGetAllStates);
   }
 };
 
