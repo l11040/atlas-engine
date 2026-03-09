@@ -1,6 +1,6 @@
 // 책임: 티켓 데이터를 SQLite에서 로드하여 파이프라인 상태에 주입한다.
 
-import { loadTicketTree } from "../../../../jira/jira-ticket-store";
+import { loadAllTicketTrees, loadTicketTree } from "../../../../jira/jira-ticket-store";
 import type { JiraTicket, JiraTicketTree } from "../../../../../../shared/ipc";
 import type { PipelineStateType } from "../state";
 
@@ -8,6 +8,15 @@ import type { PipelineStateType } from "../state";
 // 이유: ticketId가 트리의 root와 일치하지 않을 수 있으므로 직접 tickets 맵에서 탐색한다.
 function findTicketInTree(tree: JiraTicketTree, ticketId: string): JiraTicket | null {
   return tree.tickets[ticketId] ?? null;
+}
+
+// 목적: ticketId가 루트 키가 아닐 때도 저장된 전체 트리에서 포함 트리를 찾는다.
+function findTreeByTicketId(ticketId: string): JiraTicketTree | null {
+  const trees = loadAllTicketTrees();
+  for (const tree of trees) {
+    if (tree.tickets[ticketId]) return tree;
+  }
+  return null;
 }
 
 // 목적: 티켓과 하위 태스크 정보를 결합하여 분석용 설명 문자열을 생성한다.
@@ -58,12 +67,9 @@ function buildDescription(ticket: JiraTicket, tree: JiraTicketTree): string {
 
 // 목적: Jira 티켓 트리에서 대상 티켓을 찾아 설명 문자열을 구성한다.
 export async function ingest(state: PipelineStateType): Promise<Partial<PipelineStateType>> {
-  const tree = loadTicketTree(state.ticketId);
-
-  // 이유: ticketId가 root key가 아닐 수 있으므로, 먼저 root key로 시도 후 tickets에서 탐색한다.
-  if (!tree) {
-    return { error: `티켓 트리를 찾을 수 없습니다: ${state.ticketId}` };
-  }
+  // 이유: ticketId는 root key일 수도 있고 하위 ticket key일 수도 있다.
+  const tree = loadTicketTree(state.ticketId) ?? findTreeByTicketId(state.ticketId);
+  if (!tree) return { error: `티켓을 포함한 트리를 찾을 수 없습니다: ${state.ticketId}` };
 
   const ticket = findTicketInTree(tree, state.ticketId);
   if (!ticket) {

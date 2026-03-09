@@ -1,16 +1,47 @@
-// 책임: 검증 명령 실행 및 4가지 체크(테스트, 린트, 스코프, 컴파일)를 수행한다.
+// 책임: 검증 명령 실행 및 설계 검증 체크를 수행한다.
 
 import type { TaskGraphStateType } from "../state";
 import type { VerificationCheck, VerificationResult } from "../../../../../../shared/ipc";
 import { CliLlm } from "../../../cli-llm";
-import { extractJson } from "../../shared/utils";
+import { safeParseJson } from "../../shared/utils";
+import { VerificationResultSchema } from "../../shared/schemas";
 import { getSettings } from "../../../../config/settings";
+import { normalizeChecks } from "../change-utils";
+import { appendRunCliEvent } from "../../../../automation/run-log-service";
 
-// 목적: LLM(allowTools: true)으로 verify_cmd를 실행하고 결과를 분석하여 검증 판정을 내린다.
+const SEMANTIC_CHECKS = [
+  "requirement_coverage",
+  "unnecessary_changes",
+  "regression_risk",
+  "diff_explanation_alignment",
+  "policy_rules",
+  "test_scenarios"
+] as const;
+
+type SemanticCheckName = typeof SEMANTIC_CHECKS[number];
+
+// 목적: LLM(allowTools: true)으로 verify_cmd 실행 + 6개 정적 체크를 수행한다.
 export async function verify(state: TaskGraphStateType): Promise<Partial<TaskGraphStateType>> {
   try {
     const settings = getSettings();
     const { task, changeSets } = state;
+    const checks: VerificationCheck[] = [];
+    const failureReasons: string[] = [];
+
+    if (changeSets && changeSets.scope_violations.length > 0) {
+      checks.push({
+        name: "scope_check",
+        passed: false,
+        detail: `스코프 위반: ${changeSets.scope_violations.join(", ")}`
+      });
+      failureReasons.push(...changeSets.scope_violations);
+    } else {
+      checks.push({
+        name: "scope_check",
+        passed: true,
+        detail: "모든 변경이 허용된 스코프 내에 있습니다."
+      });
+    }
 
     const llm = new CliLlm({
       provider: settings.activeProvider,
@@ -20,56 +51,58 @@ export async function verify(state: TaskGraphStateType): Promise<Partial<TaskGra
       timeoutMs: settings.cli.timeoutMs
     });
 
-    // 목적: 스코프 위반은 LLM 호출 없이 즉시 실패 처리한다.
-    const checks: VerificationCheck[] = [];
-    const failureReasons: string[] = [];
+    const prompt = buildVerifyPrompt(state);
+    const { text } = await llm.invokeWithEvents(prompt, {
+      onEvent: (event) => {
+        appendRunCliEvent({
+          step: "execution",
+          node: "verify",
+          taskId: task.id,
+          event
+        });
+      }
+    });
 
-    if (changeSets && changeSets.scope_violations.length > 0) {
-      checks.push({
-        name: "scope_check",
-        passed: false,
-        detail: `Scope violations: ${changeSets.scope_violations.join(", ")}`
-      });
-      failureReasons.push(...changeSets.scope_violations);
-    } else {
-      checks.push({
-        name: "scope_check",
-        passed: true,
-        detail: "All changes within allowed scope."
-      });
+    const parseResult = safeParseJson(text, VerificationResultSchema);
+    if (!parseResult.success) {
+      return { error: `검증 응답 파싱 실패: ${parseResult.error}` };
     }
 
-    // 목적: verify_cmd가 있으면 CLI 에이전트로 실행하여 테스트/린트/컴파일 결과를 분석한다.
-    if (task.verify_cmd) {
-      const prompt = buildVerifyPrompt(task, changeSets);
-      const { text } = await llm.invokeWithEvents(prompt);
+    const parsedChecks: VerificationCheck[] = parseResult.data.checks ?? [];
+    const parsedFailures: string[] = parseResult.data.failure_reasons ?? [];
 
-      const raw = extractJson(text);
-      const parsed = JSON.parse(raw) as {
-        checks?: VerificationCheck[];
-        failure_reasons?: string[];
-      };
+    const verifyCmdCheck = task.verify_cmd
+      ? parsedChecks.find((check) => check.name === "verify_cmd") ?? {
+          name: "verify_cmd",
+          passed: false,
+          detail: "모델 출력에 verify_cmd 체크가 누락되었습니다."
+        }
+      : {
+          name: "verify_cmd",
+          passed: true,
+          detail: "검증 명령이 지정되지 않아 명령 실행을 건너뛰었습니다."
+        };
 
-      if (Array.isArray(parsed.checks)) {
-        checks.push(...parsed.checks);
-      }
-      if (Array.isArray(parsed.failure_reasons)) {
-        failureReasons.push(...parsed.failure_reasons);
-      }
-    } else {
-      // 이유: verify_cmd가 없으면 테스트/린트/컴파일 체크를 스킵으로 처리한다.
-      checks.push({
-        name: "verify_cmd",
-        passed: true,
-        detail: "No verify command specified; skipped."
-      });
+    const semanticChecks = normalizeChecks(
+      parsedChecks.filter((check): check is VerificationCheck => {
+        return SEMANTIC_CHECKS.includes(check.name as SemanticCheckName);
+      }),
+      [...SEMANTIC_CHECKS]
+    );
+
+    checks.push(verifyCmdCheck, ...semanticChecks);
+    failureReasons.push(...parsedFailures);
+
+    for (const check of checks) {
+      if (!check.passed) failureReasons.push(`${check.name}: ${check.detail}`);
     }
 
-    const allPassed = checks.every((c) => c.passed);
+    const dedupedFailureReasons = [...new Set(failureReasons)];
+    const allPassed = checks.every((check) => check.passed);
     const verification: VerificationResult = {
       verdict: allPassed ? "pass" : "fail",
       checks,
-      failure_reasons: failureReasons
+      failure_reasons: dedupedFailureReasons
     };
 
     return { verification };
@@ -78,44 +111,88 @@ export async function verify(state: TaskGraphStateType): Promise<Partial<TaskGra
   }
 }
 
-function buildVerifyPrompt(
-  task: TaskGraphStateType["task"],
-  changeSets: TaskGraphStateType["changeSets"]
-): string {
-  const changesDesc = changeSets
-    ? changeSets.changes.map((c) => `- ${c.action} ${c.path}`).join("\n")
+function buildVerifyPrompt(state: TaskGraphStateType): string {
+  const { task, changeSets, explanation, parsedRequirements } = state;
+  const changedFiles = changeSets
+    ? changeSets.changes.map((c) => `- ${c.action} ${c.path} (${c.diff_summary})`).join("\n")
     : "No changes recorded.";
 
-  return `You are a code verification agent. Run the verification command and analyze the results.
+  const acceptanceCriteria = parsedRequirements?.acceptance_criteria
+    ?.map((ac) => `- ${ac.id}: ${ac.description} (testable: ${ac.testable})`)
+    .join("\n") || "- none";
+  const policyRules = parsedRequirements?.policy_rules?.map((rule) => `- ${rule}`).join("\n") || "- none";
+  const testScenarios = parsedRequirements?.test_scenarios
+    ?.map((scenario) => `- ${scenario.id}: ${scenario.description} (AC: ${scenario.linked_ac_ids.join(", ") || "none"})`)
+    .join("\n") || "- none";
+  const changeReasons = explanation?.change_reasons
+    ?.map((entry) => `- ${entry.path}: ${entry.reason} (AC: ${entry.linked_ac_ids.join(", ") || "none"})`)
+    .join("\n") || "- none";
+
+  return `You are a strict verification agent. Validate implementation quality and run command checks.
 
 ## Task
 ID: ${task.id}
 Title: ${task.title}
+Description: ${task.description}
+Linked AC IDs: ${task.linked_ac_ids.join(", ") || "none"}
+
+## Acceptance Criteria
+${acceptanceCriteria}
+
+## Policy Rules
+${policyRules}
+
+## Test Scenarios
+${testScenarios}
+
+## Change Explanation
+Summary: ${explanation?.summary ?? "(none)"}
+Implementation rationale: ${explanation?.implementation_rationale ?? "(none)"}
+Change reasons:
+${changeReasons}
 
 ## Changed Files
-${changesDesc}
+${changedFiles}
+
+${changeSets?.diff ? `## Unified Diff\n${changeSets.diff}\n` : ""}
 
 ## Verification Command
-Run this command: ${task.verify_cmd}
+${task.verify_cmd ?? "(none)"}
 
-## Instructions
-1. Execute the verification command above.
-2. Analyze the output for test failures, lint errors, and compilation errors.
-3. Produce a JSON response matching this schema:
+## Required checks
+Return checks for ALL names below:
+- verify_cmd
+- requirement_coverage
+- unnecessary_changes
+- regression_risk
+- diff_explanation_alignment
+- policy_rules
+- test_scenarios
 
+Check meanings:
+- verify_cmd: Run verify_cmd when provided. Fail if command exits non-zero or has clear failures.
+- requirement_coverage: Changes satisfy linked acceptance criteria and do not miss core requirements.
+- unnecessary_changes: No unrelated churn or scope creep.
+- regression_risk: No new obvious regressions introduced by the diff.
+- diff_explanation_alignment: Explanation matches actual diff content.
+- policy_rules: Changes respect all listed policy rules and constraints.
+- test_scenarios: Proposed/implemented behavior is testable against listed scenarios.
+
+Respond with ONLY this JSON object:
 \`\`\`json
 {
   "checks": [
-    {
-      "name": "string — check name (e.g. 'tests', 'lint', 'compile')",
-      "passed": true,
-      "detail": "string — description of result"
-    }
+    { "name": "verify_cmd", "passed": true, "detail": "..." },
+    { "name": "requirement_coverage", "passed": true, "detail": "..." },
+    { "name": "unnecessary_changes", "passed": true, "detail": "..." },
+    { "name": "regression_risk", "passed": true, "detail": "..." },
+    { "name": "diff_explanation_alignment", "passed": true, "detail": "..." },
+    { "name": "policy_rules", "passed": true, "detail": "..." },
+    { "name": "test_scenarios", "passed": true, "detail": "..." }
   ],
-  "failure_reasons": ["string — each reason for failure, empty if all pass"]
+  "failure_reasons": ["..."]
 }
 \`\`\`
 
-Include separate checks for: tests, lint, compilation.
-Respond ONLY with the JSON object after running the command.`;
+Do not omit any required check name.`;
 }

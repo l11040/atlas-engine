@@ -3,6 +3,17 @@
 import type { TaskGraphStateType } from "../state";
 import type { ApprovalRecord } from "../../../../../../shared/ipc";
 
+function isHighSeverityRiskNote(note: string): boolean {
+  const normalized = note.toLowerCase();
+  return (
+    normalized.startsWith("high:") ||
+    normalized.includes("high risk") ||
+    normalized.includes("severity: high") ||
+    normalized.includes("sev=high") ||
+    normalized.includes("critical")
+  );
+}
+
 // 목적: 현재는 자동 승인을 수행한다.
 // TODO: Phase 3에서 human-in-the-loop 승인 대기를 구현한다.
 //   - 상태를 "awaiting_approval"로 전환하고 외부 신호를 대기하는 interrupt 패턴 적용
@@ -13,6 +24,17 @@ export async function approvalGate(state: TaskGraphStateType): Promise<Partial<T
     const approval: ApprovalRecord = {
       decision: "rejected",
       reason: `Scope violations detected: ${state.changeSets.scope_violations.join(", ")}`,
+      decidedAt: Date.now(),
+      decidedBy: "auto"
+    };
+    return { approval };
+  }
+
+  const highRiskNotes = state.explanation?.risk_notes.filter(isHighSeverityRiskNote) ?? [];
+  if (highRiskNotes.length > 0) {
+    const approval: ApprovalRecord = {
+      decision: "rejected",
+      reason: `High-severity risk notes detected: ${highRiskNotes.join(", ")}`,
       decidedAt: Date.now(),
       decidedBy: "auto"
     };

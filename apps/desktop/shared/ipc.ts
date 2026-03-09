@@ -302,6 +302,16 @@ export interface RunState {
   parsedRequirements: ParsedRequirements | null;
   riskAssessment: RiskAssessment | null;
   executionPlan: ExecutionPlan | null;
+  logs: RunLogEntry[];
+  toolTimeline: ToolTimelineEntry[];
+}
+
+export interface RunLogEntry {
+  timestamp: number;
+  level: "info" | "error";
+  step: RunStep | "system";
+  node: string;
+  message: string;
 }
 
 // ─── 요구사항 ─────────────────────────────────────────
@@ -324,6 +334,10 @@ export interface ParsedRequirements {
   implementation_steps: string[];
   test_scenarios: TestScenario[];
   missing_sections: string[];
+  /** 목적: 요구사항 간 모호성·충돌을 기록한다. */
+  ambiguity_list: string[];
+  /** 목적: 외부 의존성 및 선행 조건을 기록한다. */
+  dependency_list: string[];
   description_raw: string;
 }
 
@@ -359,6 +373,10 @@ export interface TaskUnit {
 export interface ExecutionPlan {
   tasks: TaskUnit[];
   execution_order: string[];
+  /** 목적: 검증 전략을 기술한다 (예: "unit test + typecheck + lint"). */
+  validation_strategy: string;
+  /** 목적: 롤백 전략을 기술한다. */
+  rollback_strategy: string;
 }
 
 // ─── 작업 실행 상태 (Task 단위) ──────────────────────
@@ -390,11 +408,23 @@ export interface TaskExecutionState {
   attempt: { current: number; max: number };
   changeSets: ChangeSet | null;
   explanation: ChangeExplanation | null;
+  /** 목적: 승인 전(코드 생성 단계) 검증 결과 */
   verification: VerificationResult | null;
+  /** 목적: 적용/커밋 이후 회귀 검증 결과 */
+  postVerification: VerificationResult | null;
   approval: ApprovalRecord | null;
   error: string | null;
   startedAt: number | null;
   endedAt: number | null;
+  logs: TaskLogEntry[];
+}
+
+export interface TaskLogEntry {
+  timestamp: number;
+  level: "info" | "error";
+  step: TaskStep;
+  node: string;
+  message: string;
 }
 
 // ─── 변경 ─────────────────────────────────────────────
@@ -411,11 +441,17 @@ export interface ChangeSet {
 
 export interface ChangeExplanation {
   summary: string;
+  /** 목적: 선택한 구현 방향의 이유를 기록한다. */
+  implementation_rationale: string;
   change_reasons: Array<{
     path: string;
     reason: string;
     linked_ac_ids: string[];
   }>;
+  /** 목적: 정책·제약 고려 내용을 기록한다. */
+  policy_considerations: string[];
+  /** 목적: 고려하였으나 선택하지 않은 대안을 기록한다. */
+  alternatives_considered: string[];
   risk_notes: string[];
 }
 

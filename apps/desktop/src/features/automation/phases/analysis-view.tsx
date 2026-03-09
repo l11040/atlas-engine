@@ -36,6 +36,28 @@ export function AnalysisView({ requirements }: AnalysisViewProps) {
           </ul>
         </section>
       )}
+
+      {requirements.ambiguity_list.length > 0 && (
+        <section>
+          <h4 className="text-xs font-medium text-amber-600 mb-1">모호성</h4>
+          <ul className="list-disc pl-4 text-xs text-amber-700">
+            {requirements.ambiguity_list.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {requirements.dependency_list.length > 0 && (
+        <section>
+          <h4 className="text-xs font-medium text-text-soft mb-1">의존성</h4>
+          <ul className="list-disc pl-4 text-xs text-text-strong">
+            {requirements.dependency_list.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }

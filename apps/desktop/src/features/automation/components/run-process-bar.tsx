@@ -64,6 +64,7 @@ export function RunProcessBar({
     ...s,
     state: deriveStepState(s.key, run)
   }));
+  const latestLog = run?.logs?.[run.logs.length - 1] ?? null;
 
   return (
     <div className="flex flex-col gap-2">
@@ -148,6 +149,15 @@ export function RunProcessBar({
       {(error || run?.error) && (
         <div className="rounded-md bg-red-50 px-3 py-1.5">
           <span className="text-xs text-red-600">{error || run?.error}</span>
+        </div>
+      )}
+
+      {run && (
+        <div className="rounded-md bg-surface-subtle px-3 py-1.5">
+          <span className="text-xs text-text-soft">
+            상태: {run.status} / 단계: {run.currentStep}
+            {latestLog ? ` / 최근 로그: [${latestLog.node}] ${latestLog.message}` : ""}
+          </span>
         </div>
       )}
     </div>

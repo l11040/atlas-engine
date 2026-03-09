@@ -1,5 +1,6 @@
 // 책임: 서브그래프 간 공유 유틸리티 함수를 제공한다.
 
+import type { ZodType } from "zod";
 import type { CliEvent } from "@atlas/cli-runtime";
 import type { TerminalLog, ToolTimelineEntry } from "../../../../../shared/ipc";
 
@@ -53,6 +54,30 @@ export function extractJson(text: string): string {
   }
 
   return text.trim();
+}
+
+// 목적: LLM 텍스트 응답에서 JSON을 추출하고 Zod 스키마로 검증한다.
+// 이유: extractJson + JSON.parse + safeParse 를 한 번에 처리하여 노드 코드 중복을 줄인다.
+export function safeParseJson<T>(
+  text: string,
+  schema: ZodType<T>
+): { success: true; data: T } | { success: false; error: string } {
+  try {
+    const jsonStr = extractJson(text);
+    const raw = JSON.parse(jsonStr);
+    const result = schema.safeParse(raw);
+    if (result.success) {
+      return { success: true, data: result.data };
+    }
+    // 목적: Zod 검증 오류를 읽기 쉬운 문자열로 변환한다.
+    const messages = result.error.issues
+      .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+      .join("; ");
+    return { success: false, error: `스키마 검증 실패: ${messages}` };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { success: false, error: `JSON 파싱 실패: ${message}` };
+  }
 }
 
 // 목적: CLI 이벤트 배열을 노드 카드에 표시할 터미널 로그 구조로 변환한다.

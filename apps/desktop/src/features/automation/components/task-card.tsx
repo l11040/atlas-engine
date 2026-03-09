@@ -9,6 +9,8 @@ interface TaskCardProps {
 }
 
 export function TaskCard({ task, state }: TaskCardProps) {
+  const latestLog = state?.logs?.[state.logs.length - 1];
+
   return (
     <div className="rounded-lg border border-border-default p-4">
       <div className="flex items-center gap-2 mb-2">
@@ -23,6 +25,11 @@ export function TaskCard({ task, state }: TaskCardProps) {
           <span>단계: {state.currentStep}</span>
           <span>시도: {state.attempt.current}/{state.attempt.max}</span>
         </div>
+      )}
+      {latestLog && (
+        <p className="mt-2 rounded bg-surface-subtle px-2 py-1 font-mono text-[10px] text-text-soft">
+          [{latestLog.node}] {latestLog.message}
+        </p>
       )}
     </div>
   );

@@ -2,7 +2,7 @@
 
 import { LLM, type BaseLLMParams } from "@langchain/core/language_models/llms";
 import type { CallbackManagerForLLMRun } from "@langchain/core/callbacks/manager";
-import { runCliToCompletion, type CliEvent, type CliPermissionMode, type ProviderType } from "@atlas/cli-runtime";
+import { streamCliEvents, type CliEvent, type CliPermissionMode, type ProviderType } from "@atlas/cli-runtime";
 
 export interface CliLlmParams extends BaseLLMParams {
   provider: ProviderType;
@@ -33,8 +33,13 @@ export class CliLlm extends LLM {
     return "cli-llm";
   }
 
-  async invokeWithEvents(prompt: string): Promise<{ text: string; events: CliEvent[] }> {
-    const events = await runCliToCompletion({
+  async invokeWithEvents(
+    prompt: string,
+    options?: { onEvent?: (event: CliEvent) => void }
+  ): Promise<{ text: string; events: CliEvent[] }> {
+    const events: CliEvent[] = [];
+
+    const stream = streamCliEvents({
       provider: this.provider,
       prompt,
       cwd: this.cwd,
@@ -42,6 +47,11 @@ export class CliLlm extends LLM {
       timeoutMs: this.timeoutMs,
       allowTools: this.allowTools
     });
+
+    for await (const event of stream) {
+      events.push(event);
+      options?.onEvent?.(event);
+    }
 
     let text = "";
     for (const event of events) {

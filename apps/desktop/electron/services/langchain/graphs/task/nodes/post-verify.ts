@@ -3,8 +3,10 @@
 import type { TaskGraphStateType } from "../state";
 import type { VerificationCheck, VerificationResult } from "../../../../../../shared/ipc";
 import { CliLlm } from "../../../cli-llm";
-import { extractJson } from "../../shared/utils";
+import { safeParseJson } from "../../shared/utils";
+import { VerificationResultSchema } from "../../shared/schemas";
 import { getSettings } from "../../../../config/settings";
+import { appendRunCliEvent } from "../../../../automation/run-log-service";
 
 // 목적: LLM(allowTools: true)으로 전체 빌드/테스트를 실행하여 회귀를 검출한다.
 export async function postVerify(state: TaskGraphStateType): Promise<Partial<TaskGraphStateType>> {
@@ -14,7 +16,19 @@ export async function postVerify(state: TaskGraphStateType): Promise<Partial<Tas
 
     // 이유: verify_cmd가 없으면 post-verify도 스킵한다.
     if (!task.verify_cmd) {
-      return {};
+      return {
+        postVerification: {
+          verdict: "pass",
+          checks: [
+            {
+              name: "post_verify_cmd",
+              passed: true,
+              detail: "검증 명령이 지정되지 않아 post-verify를 건너뛰었습니다."
+            }
+          ],
+          failure_reasons: []
+        }
+      };
     }
 
     const llm = new CliLlm({
@@ -26,25 +40,33 @@ export async function postVerify(state: TaskGraphStateType): Promise<Partial<Tas
     });
 
     const prompt = buildPostVerifyPrompt(task);
-    const { text } = await llm.invokeWithEvents(prompt);
+    const { text } = await llm.invokeWithEvents(prompt, {
+      onEvent: (event) => {
+        appendRunCliEvent({
+          step: "execution",
+          node: "post_verify",
+          taskId: task.id,
+          event
+        });
+      }
+    });
 
-    const raw = extractJson(text);
-    const parsed = JSON.parse(raw) as {
-      checks?: VerificationCheck[];
-      failure_reasons?: string[];
-    };
+    const parseResult = safeParseJson(text, VerificationResultSchema);
+    if (!parseResult.success) {
+      return { error: `post-verify 응답 파싱 실패: ${parseResult.error}` };
+    }
 
-    const checks: VerificationCheck[] = Array.isArray(parsed.checks) ? parsed.checks : [];
-    const failureReasons: string[] = Array.isArray(parsed.failure_reasons) ? parsed.failure_reasons : [];
+    const checks: VerificationCheck[] = parseResult.data.checks ?? [];
+    const failureReasons: string[] = parseResult.data.failure_reasons ?? [];
     const allPassed = checks.length > 0 && checks.every((c) => c.passed);
 
-    const verification: VerificationResult = {
+    const postVerification: VerificationResult = {
       verdict: allPassed ? "pass" : "fail",
       checks,
       failure_reasons: failureReasons
     };
 
-    return { verification };
+    return { postVerification };
   } catch (err) {
     return { error: `post-verify 실패: ${err instanceof Error ? err.message : String(err)}` };
   }

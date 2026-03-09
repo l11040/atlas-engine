@@ -5,6 +5,13 @@ import type { ChangeSet } from "../../../../../../shared/ipc";
 import { CliLlm } from "../../../cli-llm";
 import { getSettings } from "../../../../config/settings";
 import { getGitDiff } from "../../../../git/diff";
+import { appendRunCliEvent } from "../../../../automation/run-log-service";
+import {
+  buildUnifiedDiff,
+  detectScopeViolations,
+  mapDiffStatus,
+  summarizeTaskScope
+} from "../change-utils";
 
 // 목적: LLM(allowTools: true)으로 코드를 생성하고, diff를 캡처하여 ChangeSet으로 반환한다.
 export async function generate(state: TaskGraphStateType): Promise<Partial<TaskGraphStateType>> {
@@ -22,7 +29,16 @@ export async function generate(state: TaskGraphStateType): Promise<Partial<TaskG
     });
 
     const prompt = buildGeneratePrompt(task);
-    await llm.invokeWithEvents(prompt);
+    await llm.invokeWithEvents(prompt, {
+      onEvent: (event) => {
+        appendRunCliEvent({
+          step: "execution",
+          node: "generate",
+          taskId: task.id,
+          event
+        });
+      }
+    });
 
     // 목적: CLI 실행 후 git diff로 실제 변경 사항을 캡처한다.
     const diffResult = await getGitDiff(cwd);
@@ -44,9 +60,7 @@ export async function generate(state: TaskGraphStateType): Promise<Partial<TaskG
         action: mapDiffStatus(f.status),
         diff_summary: `+${f.additions} -${f.deletions}`
       })),
-      diff: diffResult.files.length > 0
-        ? diffResult.files.map((f) => f.hunks.map((h) => h.header).join("\n")).join("\n")
-        : null,
+      diff: buildUnifiedDiff(diffResult.files),
       scope_violations: scopeViolations
     };
 
@@ -57,12 +71,7 @@ export async function generate(state: TaskGraphStateType): Promise<Partial<TaskG
 }
 
 function buildGeneratePrompt(task: TaskGraphStateType["task"]): string {
-  const scopeSection = task.scope.editable_paths.length > 0
-    ? `\nEditable paths: ${task.scope.editable_paths.join(", ")}`
-    : "";
-  const forbiddenSection = task.scope.forbidden_paths.length > 0
-    ? `\nForbidden paths (DO NOT modify): ${task.scope.forbidden_paths.join(", ")}`
-    : "";
+  const scopeSection = summarizeTaskScope(task);
 
   return `You are implementing a code change task. Follow the instructions precisely.
 
@@ -71,7 +80,8 @@ ID: ${task.id}
 Title: ${task.title}
 Description: ${task.description}
 
-## Scope Constraints${scopeSection}${forbiddenSection}
+## Scope Constraints
+${scopeSection}
 
 ## Acceptance Criteria References
 Linked AC IDs: ${task.linked_ac_ids.join(", ") || "none"}
@@ -82,43 +92,4 @@ Linked AC IDs: ${task.linked_ac_ids.join(", ") || "none"}
 3. Stay strictly within the allowed scope. Do NOT modify files outside editable_paths.
 4. Make minimal, focused changes that satisfy the task description.
 5. Ensure the code compiles and follows existing conventions.`;
-}
-
-// 목적: diff 파일 상태를 ChangeSet action으로 매핑한다.
-function mapDiffStatus(status: "added" | "modified" | "deleted" | "renamed"): "create" | "modify" | "delete" {
-  switch (status) {
-    case "added": return "create";
-    case "deleted": return "delete";
-    default: return "modify";
-  }
-}
-
-// 목적: 변경된 파일이 editable_paths 밖이거나 forbidden_paths 안에 있으면 위반으로 판정한다.
-function detectScopeViolations(
-  changedPaths: string[],
-  editablePaths: string[],
-  forbiddenPaths: string[]
-): string[] {
-  const violations: string[] = [];
-
-  for (const filePath of changedPaths) {
-    // 주의: forbidden_paths 위반 검사
-    for (const forbidden of forbiddenPaths) {
-      if (filePath.startsWith(forbidden) || filePath === forbidden) {
-        violations.push(`Forbidden path modified: ${filePath}`);
-      }
-    }
-
-    // 주의: editable_paths가 지정된 경우, 해당 범위 밖 수정도 위반이다.
-    if (editablePaths.length > 0) {
-      const withinScope = editablePaths.some(
-        (allowed) => filePath.startsWith(allowed) || filePath === allowed
-      );
-      if (!withinScope) {
-        violations.push(`Out of scope: ${filePath}`);
-      }
-    }
-  }
-
-  return violations;
 }

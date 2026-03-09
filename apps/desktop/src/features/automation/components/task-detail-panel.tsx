@@ -15,6 +15,11 @@ export function TaskDetailPanel({ state }: TaskDetailPanelProps) {
         <section>
           <h4 className="text-xs font-medium text-text-soft mb-1">변경 설명</h4>
           <p className="text-xs text-text-strong">{state.explanation.summary}</p>
+          {state.explanation.implementation_rationale && (
+            <p className="mt-1 text-xs text-text-soft">
+              구현 근거: {state.explanation.implementation_rationale}
+            </p>
+          )}
         </section>
       )}
 
@@ -34,6 +39,22 @@ export function TaskDetailPanel({ state }: TaskDetailPanelProps) {
         </section>
       )}
 
+      {state.postVerification && (
+        <section>
+          <h4 className="text-xs font-medium text-text-soft mb-1">반영 후 검증</h4>
+          <p className="text-xs text-text-strong">
+            판정: {state.postVerification.verdict}
+          </p>
+          {state.postVerification.failure_reasons.length > 0 && (
+            <ul className="mt-1 list-disc pl-4 text-xs text-red-500">
+              {state.postVerification.failure_reasons.map((reason, i) => (
+                <li key={i}>{reason}</li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
       {state.changeSets?.diff && (
         <section>
           <h4 className="text-xs font-medium text-text-soft mb-1">Diff</h4>
@@ -43,7 +64,7 @@ export function TaskDetailPanel({ state }: TaskDetailPanelProps) {
         </section>
       )}
 
-      {!state.explanation && !state.verification && !state.changeSets && (
+      {!state.explanation && !state.verification && !state.postVerification && !state.changeSets && (
         <p className="text-xs text-text-soft">아직 생성된 데이터가 없습니다.</p>
       )}
     </div>

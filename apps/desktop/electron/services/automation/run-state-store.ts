@@ -6,6 +6,14 @@ import { encodeStoredValue, decodeStoredValue } from "../storage/codec";
 
 let cached: RunState | null = null;
 
+function normalizeRunState(state: RunState): RunState {
+  return {
+    ...state,
+    logs: Array.isArray(state.logs) ? state.logs : [],
+    toolTimeline: Array.isArray(state.toolTimeline) ? state.toolTimeline : []
+  };
+}
+
 export function getRunState(): RunState | null {
   if (cached) return cached;
 
@@ -15,26 +23,27 @@ export function getRunState(): RunState | null {
     | undefined;
 
   if (!row) return null;
-  cached = decodeStoredValue<RunState>(row.data);
+  const decoded = decodeStoredValue<RunState>(row.data);
+  cached = decoded ? normalizeRunState(decoded) : null;
   return cached;
 }
 
 export function saveRunState(state: RunState): void {
-  cached = state;
+  cached = normalizeRunState(state);
   const db = getAppDatabase();
   const now = Date.now();
-  const blob = encodeStoredValue(state);
+  const blob = encodeStoredValue(cached);
 
   db.prepare(
     `INSERT INTO runs (run_id, ticket_id, data, status, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(run_id) DO UPDATE SET data = ?, status = ?, updated_at = ?`
   ).run(
-    state.runId,
-    state.ticketId,
+    cached.runId,
+    cached.ticketId,
     blob,
-    state.status,
-    state.startedAt ?? now,
+    cached.status,
+    cached.startedAt ?? now,
     now,
     blob,
     state.status,

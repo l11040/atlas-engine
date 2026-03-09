@@ -4,12 +4,15 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { BottomDrawer } from "@/components/bottom-drawer";
 import { useHeaderLeft } from "@/components/app-layout";
+import { useBottomDrawer } from "@/hooks/use-bottom-drawer";
 import { JiraTicketTreeView } from "@/features/jira/components/jira-ticket-tree";
 import { JiraTicketDetail } from "@/features/jira/components/jira-ticket-detail";
 import { useRunState } from "@/features/automation/hooks/use-run-state";
 import { useTaskStates } from "@/features/automation/hooks/use-task-states";
 import { RunProcessBar } from "@/features/automation/components/run-process-bar";
+import { RunLogPanel } from "@/features/automation/components/run-log-panel";
 import { AnalysisView } from "@/features/automation/phases/analysis-view";
 import { RiskView } from "@/features/automation/phases/risk-view";
 import { PlanView } from "@/features/automation/phases/plan-view";
@@ -27,6 +30,7 @@ export default function TicketPage() {
 
   const { runState } = useRunState();
   const { taskStates } = useTaskStates();
+  const { setStatusText } = useBottomDrawer();
 
   // 목적: 현재 티켓에 대한 실행이 진행 중인지 판별한다.
   const isRunActive = runState != null && runState.ticketId === ticketKey && runState.status === "running";
@@ -39,6 +43,31 @@ export default function TicketPage() {
       setSelectedStep(currentStep);
     }
   }, [currentStep]);
+
+  // 목적: 실행 상태에 따라 하단 드로어 상태 바 텍스트를 갱신한다.
+  useEffect(() => {
+    if (!runForTicket) {
+      setStatusText("");
+      return;
+    }
+    if (runForTicket.status === "running" && currentStep) {
+      const stepLabels: Record<string, string> = {
+        idle: "대기 중",
+        ingestion: "데이터 수집 중",
+        analyze: "요구사항 분석 중",
+        risk: "위험 평가 중",
+        plan: "실행 계획 수립 중",
+        execution: "작업 실행 중",
+        archiving: "결과 저장 중",
+        done: "완료",
+      };
+      setStatusText(stepLabels[currentStep] ?? `${currentStep} 진행 중`);
+    } else if (runForTicket.status === "completed") {
+      setStatusText("실행 완료");
+    } else if (runForTicket.status === "failed") {
+      setStatusText("실행 실패");
+    }
+  }, [runForTicket, currentStep, setStatusText]);
 
   // 목적: 헤더 좌측에 뒤로가기 + 티켓 키만 표시한다.
   useEffect(() => {
@@ -186,6 +215,10 @@ export default function TicketPage() {
       />
 
       {renderStepContent()}
+
+      <BottomDrawer isRunning={isRunActive}>
+        <RunLogPanel run={runForTicket} taskStates={taskStates} />
+      </BottomDrawer>
     </div>
   );
 }

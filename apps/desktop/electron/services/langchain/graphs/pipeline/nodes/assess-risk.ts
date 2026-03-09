@@ -2,55 +2,59 @@
 
 import { CliLlm } from "../../../cli-llm";
 import { getSettings } from "../../../../config/settings";
-import { extractJson } from "../../shared/utils";
+import { safeParseJson } from "../../shared/utils";
+import { RiskAssessmentSchema } from "../../shared/schemas";
 import type { RiskAssessment } from "../../../../../../shared/ipc";
 import type { PipelineStateType } from "../state";
+import { appendRunCliEvent } from "../../../../automation/run-log-service";
 
-const SYSTEM_PROMPT = `You are a senior software engineer performing a risk assessment for a development task. Given the parsed requirements of a Jira ticket, evaluate the risk factors and provide a structured assessment.
+const SYSTEM_PROMPT = `당신은 시니어 소프트웨어 엔지니어로서 개발 작업의 위험도를 평가합니다. Jira 티켓의 파싱된 요구사항을 기반으로 위험 요소를 분석하고 구조화된 평가를 제공하세요.
 
-You MUST respond with a single JSON object matching this exact schema:
+**중요: 모든 텍스트 값(description, recommendation 등)은 반드시 한글로 작성하세요. 카테고리 키와 레벨 값만 영어를 허용합니다.**
+
+반드시 아래 스키마에 맞는 단일 JSON 객체로 응답하세요:
 
 {
   "level": "low" | "medium" | "high",
   "factors": [
-    { "category": "...", "description": "...", "severity": "low" | "medium" | "high" }
+    { "category": "...", "description": "한글로 작성", "severity": "low" | "medium" | "high" }
   ],
-  "recommendation": "..."
+  "recommendation": "한글로 작성"
 }
 
-Risk evaluation criteria:
+위험 평가 기준:
 
-1. Scope & Complexity:
-   - Number of acceptance criteria and implementation steps
-   - Cross-cutting concerns (auth, i18n, caching, etc.)
-   - Number of system components affected
+1. 범위 및 복잡도:
+   - 인수 기준 및 구현 단계의 수
+   - 횡단 관심사 (인증, i18n, 캐싱 등)
+   - 영향받는 시스템 컴포넌트의 수
 
-2. Dependencies & Integration:
-   - External API dependencies
-   - Database schema changes
-   - Shared library modifications
-   - Inter-service communication changes
+2. 의존성 및 통합:
+   - dependency_list 항목 및 외부 API 의존성
+   - DB 스키마 변경
+   - 공유 라이브러리 수정
+   - 서비스 간 통신 변경
 
-3. Regression & Quality:
-   - Test coverage gaps (non-testable acceptance criteria)
-   - Missing specifications identified in the requirements
-   - Impact on existing functionality
+3. 회귀 및 품질:
+   - 테스트 커버리지 공백 (테스트 불가능한 인수 기준)
+   - 누락된 명세 및 ambiguity_list 항목
+   - 기존 기능에 미치는 영향
 
-4. Operational:
-   - Deployment complexity (migrations, feature flags)
-   - Rollback difficulty
-   - Performance implications
+4. 운영:
+   - 배포 복잡도 (마이그레이션, 피처 플래그)
+   - 롤백 난이도
+   - 성능 영향
 
-Categories for factors: "scope", "dependency", "regression", "operational", "specification_gap"
+카테고리 값: "scope", "dependency", "regression", "operational", "specification_gap"
 
-Overall level rules:
-- "high": Any factor with severity "high", OR 3+ factors with severity "medium", OR critical missing specifications
-- "medium": 1-2 factors with severity "medium", OR moderate missing specifications
-- "low": All factors are "low" severity and no significant gaps
+전체 레벨 규칙:
+- "high": severity "high"인 요소가 1개 이상, 또는 "medium"인 요소가 3개 이상, 또는 치명적 명세 공백
+- "medium": severity "medium"인 요소가 1~2개, 또는 보통 수준의 명세 공백
+- "low": 모든 요소가 "low"이고 의미 있는 공백 없음
 
-The "recommendation" field should be a concise actionable summary (1-3 sentences) advising the team on how to proceed.
+"recommendation"은 팀에 대한 간결한 조언(1~3문장)으로 한글 작성합니다.
 
-Respond ONLY with the JSON object, no additional text.`;
+JSON 객체만 응답하세요. 추가 텍스트는 넣지 마세요.`;
 
 // 목적: LLM을 사용하여 파싱된 요구사항 기반으로 RiskAssessment를 생성한다.
 export async function assessRisk(state: PipelineStateType): Promise<Partial<PipelineStateType>> {
@@ -68,20 +72,39 @@ export async function assessRisk(state: PipelineStateType): Promise<Partial<Pipe
 
   try {
     const requirementsContext = JSON.stringify(state.parsedRequirements, null, 2);
-    const response = await llm.invoke(
-      `${SYSTEM_PROMPT}\n\n---\n\nAssess the risk for the following parsed requirements:\n\n${requirementsContext}`
+    const { text } = await llm.invokeWithEvents(
+      `${SYSTEM_PROMPT}\n\n---\n\nAssess the risk for the following parsed requirements:\n\n${requirementsContext}`,
+      {
+        onEvent: (event) => {
+          appendRunCliEvent({
+            step: "risk",
+            node: "assess_risk",
+            event
+          });
+        }
+      }
     );
 
-    const jsonStr = extractJson(response);
-    const parsed: RiskAssessment = JSON.parse(jsonStr);
-
-    // 주의: level 값이 허용된 범위인지 검증한다.
-    if (!["low", "medium", "high"].includes(parsed.level)) {
-      return { error: `유효하지 않은 위험 레벨: ${parsed.level}` };
+    const result = safeParseJson(text, RiskAssessmentSchema);
+    if (!result.success) {
+      return { error: `위험 평가 응답 파싱 실패: ${result.error}` };
     }
 
-    if (!Array.isArray(parsed.factors)) {
-      return { error: "LLM 응답에 factors 배열이 없습니다." };
+    const parsed: RiskAssessment = { ...result.data };
+
+    // 주의: 위험 요소가 비어 있으면 중간 수준 불확실성으로 처리한다.
+    if (parsed.factors.length === 0) {
+      parsed.factors = [
+        {
+          category: "specification_gap",
+          description: "명시적 위험 요소가 반환되지 않았습니다. 중간 수준 불확실성으로 처리합니다.",
+          severity: "medium"
+        }
+      ];
+      if (!parsed.recommendation) {
+        parsed.recommendation = "주의하여 진행하고 검증 범위를 강화하세요.";
+      }
+      if (parsed.level === "low") parsed.level = "medium";
     }
 
     return { riskAssessment: parsed };

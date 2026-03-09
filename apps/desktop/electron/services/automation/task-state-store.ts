@@ -6,6 +6,14 @@ import { encodeStoredValue, decodeStoredValue } from "../storage/codec";
 
 const cache = new Map<string, TaskExecutionState>();
 
+function normalizeTaskState(state: TaskExecutionState): TaskExecutionState {
+  return {
+    ...state,
+    postVerification: state.postVerification ?? null,
+    logs: Array.isArray(state.logs) ? state.logs : []
+  };
+}
+
 export function getTaskState(taskId: string): TaskExecutionState | null {
   if (cache.has(taskId)) return cache.get(taskId)!;
 
@@ -16,8 +24,10 @@ export function getTaskState(taskId: string): TaskExecutionState | null {
 
   if (!row) return null;
   const state = decodeStoredValue<TaskExecutionState>(row.data);
-  if (state) cache.set(taskId, state);
-  return state;
+  if (!state) return null;
+  const normalized = normalizeTaskState(state);
+  cache.set(taskId, normalized);
+  return normalized;
 }
 
 export function getAllTaskStates(runId: string): Record<string, TaskExecutionState> {
@@ -31,24 +41,26 @@ export function getAllTaskStates(runId: string): Record<string, TaskExecutionSta
   for (const row of rows) {
     const state = decodeStoredValue<TaskExecutionState>(row.data);
     if (state) {
-      result[row.task_id] = state;
-      cache.set(row.task_id, state);
+      const normalized = normalizeTaskState(state);
+      result[row.task_id] = normalized;
+      cache.set(row.task_id, normalized);
     }
   }
   return result;
 }
 
 export function saveTaskState(runId: string, state: TaskExecutionState): void {
-  cache.set(state.taskId, state);
+  const normalized = normalizeTaskState(state);
+  cache.set(normalized.taskId, normalized);
   const db = getAppDatabase();
   const now = Date.now();
-  const blob = encodeStoredValue(state);
+  const blob = encodeStoredValue(normalized);
 
   db.prepare(
     `INSERT INTO task_executions (task_id, run_id, data, status, updated_at)
      VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(task_id) DO UPDATE SET data = ?, status = ?, updated_at = ?`
-  ).run(state.taskId, runId, blob, state.status, now, blob, state.status, now);
+  ).run(normalized.taskId, runId, blob, normalized.status, now, blob, normalized.status, now);
 }
 
 export function clearTaskStates(): void {
