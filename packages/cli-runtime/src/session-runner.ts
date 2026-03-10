@@ -31,12 +31,40 @@ interface ParseIssue {
   error: Error;
 }
 
+// 목적: text 포맷용 패스스루 파서. stdout 청크를 그대로 text 이벤트로 변환한다.
+function createTextPassthroughParser(
+  requestId: string,
+  provider: ProviderType,
+  onEvent: (event: CliEvent) => void
+): FeedAndFlush {
+  return {
+    feed(chunk: string) {
+      if (chunk) {
+        onEvent({
+          requestId,
+          provider,
+          phase: "text",
+          text: chunk,
+          timestamp: Date.now()
+        });
+      }
+    },
+    flush() { /* noop */ }
+  };
+}
+
 function createParserForProvider(
   provider: ProviderType,
   requestId: string,
+  outputFormat: string,
   onEvent: (event: CliEvent) => void,
   onParseIssue: (issue: ParseIssue) => void
 ): FeedAndFlush {
+  // 이유: text 포맷은 JSON 파싱 없이 stdout 청크를 그대로 text 이벤트로 전달한다.
+  if (outputFormat === "text") {
+    return createTextPassthroughParser(requestId, provider, onEvent);
+  }
+
   if (provider === "claude") {
     return createStreamJsonParser(
       (rawEvent) => {
@@ -112,6 +140,7 @@ export function startCliSession(options: StartCliSessionOptions): CliSessionHand
   const parser = createParserForProvider(
     options.provider,
     options.requestId,
+    options.outputFormat ?? "stream-json",
     publish,
     ({ provider, rawLine, error }) => {
       publish({

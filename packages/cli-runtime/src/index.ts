@@ -17,6 +17,7 @@ export type {
   CliPermissionMode,
   CliConversationMode,
   CliConversationOptions,
+  CliOutputFormat,
   CliPromptTransport,
   ProviderType,
   StreamJsonEvent,

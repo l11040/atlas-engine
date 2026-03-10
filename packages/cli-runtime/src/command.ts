@@ -20,17 +20,20 @@ function shouldUseStdin(options: Pick<CliSpawnOptions, "prompt" | "promptTranspo
 // 목적: provider에 따라 CLI 실행 명령어와 인자를 결정한다.
 export function buildCliCommand(
   options: Pick<CliSpawnOptions,
-    "provider" | "prompt" | "permissionMode" | "allowTools" | "conversation" | "promptTransport" | "maxArgPromptLength">
+    "provider" | "prompt" | "permissionMode" | "allowTools" | "outputFormat" | "conversation" | "promptTransport" | "maxArgPromptLength">
 ): CliCommand {
   const useStdin = shouldUseStdin(options);
   const conversation = options.conversation ?? {};
   const mode = conversation.mode ?? "new";
 
   if (options.provider === "claude") {
+    const format = options.outputFormat ?? "stream-json";
     const args = [
       "-p",
-      "--output-format", "stream-json",
+      "--output-format", format,
       "--verbose",
+      // 목적: 토큰 단위 실시간 스트리밍을 활성화한다. stream-json에서만 동작한다.
+      "--include-partial-messages",
       "--permission-mode", options.permissionMode === "auto" ? "bypassPermissions" : "default"
     ];
 

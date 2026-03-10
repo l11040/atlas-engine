@@ -21,6 +21,11 @@ export interface CliConversationOptions {
 
 export type CliPromptTransport = "auto" | "argv" | "stdin";
 
+// 목적: CLI 출력 포맷을 결정한다.
+// stream-json: 턴 단위 JSON 이벤트 (도구 사용 시 필수)
+// text: 토큰 단위 실시간 텍스트 스트리밍 (도구 미사용 시 권장)
+export type CliOutputFormat = "stream-json" | "text";
+
 // ─── Claude stream-json raw event ───────────────────────
 
 export interface StreamJsonSystemInit {
@@ -76,11 +81,26 @@ export interface StreamJsonResult {
   session_id: string;
 }
 
+// 목적: --include-partial-messages 사용 시 토큰 단위 스트리밍 이벤트를 래핑한다.
+export interface StreamJsonStreamEvent {
+  type: "stream_event";
+  event: {
+    type: string;
+    index?: number;
+    message?: Record<string, unknown>;
+    content_block?: Record<string, unknown>;
+    delta?: Record<string, unknown>;
+  };
+  session_id: string;
+  parent_tool_use_id: string | null;
+}
+
 export type StreamJsonEvent =
   | StreamJsonSystemInit
   | StreamJsonAssistantMessage
   | StreamJsonUserMessage
-  | StreamJsonResult;
+  | StreamJsonResult
+  | StreamJsonStreamEvent;
 
 // ─── Normalized event ────────────────────────────────────
 
@@ -123,6 +143,8 @@ export interface CliSpawnOptions {
   permissionMode: CliPermissionMode;
   timeoutMs: number;
   allowTools?: boolean;
+  // 목적: CLI 출력 포맷. 기본값은 stream-json.
+  outputFormat?: CliOutputFormat;
   conversation?: CliConversationOptions;
   promptTransport?: CliPromptTransport;
   // 목적: auto 모드에서 argv 전달 상한 길이(문자 수).
