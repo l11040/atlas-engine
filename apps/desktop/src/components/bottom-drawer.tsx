@@ -13,10 +13,27 @@ import {
   useBottomDrawer,
 } from "@/hooks/use-bottom-drawer";
 
+const STORAGE_KEY_HEIGHT = "atlas:drawer-height";
 const STATUS_BAR_HEIGHT = 32;
+const DRAG_HANDLE_HEIGHT = 12;
 const DEFAULT_HEIGHT = 250;
 const MIN_HEIGHT = 120;
 const MAX_VH_RATIO = 0.6;
+
+function loadHeight(): number {
+  try {
+    const v = localStorage.getItem(STORAGE_KEY_HEIGHT);
+    if (v) {
+      const n = Number(v);
+      if (Number.isFinite(n) && n >= MIN_HEIGHT) return n;
+    }
+  } catch { /* noop */ }
+  return DEFAULT_HEIGHT;
+}
+
+function saveHeight(h: number): void {
+  try { localStorage.setItem(STORAGE_KEY_HEIGHT, String(Math.round(h))); } catch { /* noop */ }
+}
 
 interface BottomDrawerProviderProps {
   children: ReactNode;
@@ -50,7 +67,7 @@ export function BottomDrawer({
   children,
 }: BottomDrawerProps) {
   const { isOpen, toggle: onToggle, statusText } = useBottomDrawer();
-  const [height, setHeight] = useState(DEFAULT_HEIGHT);
+  const [height, setHeight] = useState(loadHeight);
   const dragging = useRef(false);
   const startY = useRef(0);
   const startHeight = useRef(DEFAULT_HEIGHT);
@@ -88,6 +105,8 @@ export function BottomDrawer({
 
       function onMouseUp() {
         dragging.current = false;
+        // 목적: 드래그 종료 시 높이를 localStorage에 저장한다.
+        saveHeight(startHeight.current + (startY.current - (window.event as MouseEvent)?.clientY || 0));
         document.removeEventListener("mousemove", onMouseMove);
         document.removeEventListener("mouseup", onMouseUp);
       }
@@ -98,17 +117,25 @@ export function BottomDrawer({
     [height]
   );
 
-  const totalHeight = isOpen ? height + STATUS_BAR_HEIGHT : STATUS_BAR_HEIGHT;
+  // 목적: 높이 변경 시 localStorage에 저장한다.
+  useEffect(() => {
+    if (!dragging.current) saveHeight(height);
+  }, [height]);
+
+  // 이유: 드래그 핸들 + 상태 바 높이를 제외한 순수 콘텐츠 영역 높이를 계산한다.
+  const contentHeight = height;
+  const totalHeight = isOpen ? contentHeight + STATUS_BAR_HEIGHT + DRAG_HANDLE_HEIGHT : STATUS_BAR_HEIGHT;
 
   return (
     <div
-      className="fixed right-0 bottom-0 left-0 z-[var(--z-sticky)] flex flex-col bg-surface-base transition-[height] duration-200 ease-[var(--easing-standard)]"
+      className="fixed right-0 bottom-0 left-0 z-[var(--z-sticky)] flex flex-col bg-surface-base"
       style={{ height: totalHeight }}
     >
       {/* 목적: 확장 시 상단 그림자 + 드래그 핸들을 표시한다 */}
       {isOpen && (
         <div
-          className="group flex cursor-row-resize items-center justify-center border-t border-border-subtle py-1 shadow-[0_-4px_12px_rgba(0,0,0,0.08)]"
+          className="group flex shrink-0 cursor-row-resize items-center justify-center border-t border-border-subtle py-1 shadow-[0_-4px_12px_rgba(0,0,0,0.08)]"
+          style={{ height: DRAG_HANDLE_HEIGHT }}
           onMouseDown={handleMouseDown}
         >
           <div className="h-[3px] w-8 rounded-full bg-neutral-300 transition-colors group-hover:bg-neutral-400" />
@@ -117,11 +144,11 @@ export function BottomDrawer({
 
       {/* 상태 바 */}
       <div
-        className="flex h-8 shrink-0 cursor-pointer items-center justify-between border-t border-border-subtle px-4"
+        className="flex shrink-0 cursor-pointer items-center justify-between px-4"
+        style={{ height: STATUS_BAR_HEIGHT }}
         onClick={onToggle}
       >
         <div className="flex items-center gap-2">
-          {/* 인디케이터 점 */}
           <span
             className={`inline-block h-2 w-2 rounded-full ${
               isRunning
@@ -154,9 +181,9 @@ export function BottomDrawer({
         </div>
       </div>
 
-      {/* 목적: 확장 시 children 콘텐츠를 표시한다 */}
+      {/* 목적: 확장 시 children 콘텐츠를 남은 공간에 꽉 채운다 */}
       {isOpen && (
-        <div className="flex-1 overflow-auto px-4 py-2" style={{ height }}>
+        <div className="flex min-h-0 flex-1 overflow-hidden">
           {children}
         </div>
       )}

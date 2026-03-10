@@ -1,7 +1,13 @@
 // 책임: 파이프라인 실행 스텝을 미니멀한 수평 탭으로 표시한다.
 
-import { Loader2, Play, Square } from "lucide-react";
+import { ChevronDown, Loader2, Play, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import type { RunState, RunStep } from "@shared/ipc";
 
@@ -13,6 +19,15 @@ export const PIPELINE_STEPS: { key: RunStep; label: string }[] = [
   { key: "execution", label: "실행" },
   { key: "archiving", label: "저장" },
   { key: "done", label: "완료" }
+];
+
+// 목적: 드롭다운에서 "여기서 시작" 가능한 단계만 필터한다.
+const STARTABLE_STEPS: { key: RunStep; label: string }[] = [
+  { key: "ingestion", label: "처음부터" },
+  { key: "analyze", label: "해석부터" },
+  { key: "risk", label: "위험부터" },
+  { key: "plan", label: "계획부터" },
+  { key: "execution", label: "실행부터" }
 ];
 
 export type StepState = "done" | "active" | "failed" | "pending";
@@ -46,7 +61,7 @@ interface RunProcessBarProps {
   error: string | null;
   selectedStep: RunStep;
   onSelectStep: (step: RunStep) => void;
-  onStart: () => void;
+  onStart: (fromStep?: RunStep) => void;
   onCancel: () => void;
 }
 
@@ -64,7 +79,9 @@ export function RunProcessBar({
     ...s,
     state: deriveStepState(s.key, run)
   }));
-  const latestLog = run?.logs?.[run.logs.length - 1] ?? null;
+
+  // 목적: 이전 Run이 완료/실패 상태일 때만 "여기서 시작" 드롭다운을 표시한다.
+  const hasPreviousRun = run != null && (run.status === "completed" || run.status === "failed");
 
   return (
     <div className="flex flex-col gap-2">
@@ -129,18 +146,50 @@ export function RunProcessBar({
           })}
         </nav>
 
-        {/* 목적: 실행/중지 버튼 */}
-        <div className="shrink-0 pb-1.5">
+        {/* 목적: 실행/중지 버튼. 이전 Run이 있으면 드롭다운으로 특정 단계부터 시작 가능 */}
+        <div className="flex shrink-0 items-center gap-0 pb-1.5">
           {isRunning ? (
             <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={onCancel}>
               <Square className="h-3 w-3" />
               중지
             </Button>
           ) : (
-            <Button size="sm" className="h-7 gap-1.5 text-xs" disabled={starting} onClick={onStart}>
-              {starting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
-              실행
-            </Button>
+            <div className="flex items-center">
+              <Button
+                size="sm"
+                className={cn("h-7 gap-1.5 text-xs", hasPreviousRun && "rounded-r-none")}
+                disabled={starting}
+                onClick={() => onStart()}
+              >
+                {starting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
+                실행
+              </Button>
+
+              {hasPreviousRun && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="sm"
+                      className="h-7 rounded-l-none border-l border-l-white/20 px-1.5"
+                      disabled={starting}
+                    >
+                      <ChevronDown className="h-3 w-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-[120px]">
+                    {STARTABLE_STEPS.map((s) => (
+                      <DropdownMenuItem
+                        key={s.key}
+                        className="text-xs"
+                        onClick={() => onStart(s.key)}
+                      >
+                        {s.label}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -152,14 +201,6 @@ export function RunProcessBar({
         </div>
       )}
 
-      {run && (
-        <div className="rounded-md bg-surface-subtle px-3 py-1.5">
-          <span className="text-xs text-text-soft">
-            상태: {run.status} / 단계: {run.currentStep}
-            {latestLog ? ` / 최근 로그: [${latestLog.node}] ${latestLog.message}` : ""}
-          </span>
-        </div>
-      )}
     </div>
   );
 }

@@ -100,12 +100,15 @@ export default function TicketPage() {
 
   const ticket = tree ? tree.tickets[selectedKey] ?? null : null;
 
-  async function handleStartRun() {
+  async function handleStartRun(fromStep?: RunStep) {
     if (!ticketKey) return;
     setStarting(true);
     setError(null);
     try {
-      const res = await window.atlas.startRun({ ticketId: ticketKey });
+      const res = await window.atlas.startRun({
+        ticketId: ticketKey,
+        startFromStep: fromStep
+      });
       if (res.status !== "accepted") {
         setError(res.message ?? "실행 시작 실패");
       }
