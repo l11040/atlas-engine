@@ -6,7 +6,7 @@ import { safeParseJson } from "../../shared/utils";
 import { ParsedRequirementsSchema } from "../../shared/schemas";
 import type { ParsedRequirements } from "../../../../../../shared/ipc";
 import type { PipelineStateType } from "../state";
-import { appendRunCliEvent } from "../../../../automation/run-log-service";
+import { appendRunCliEvent, appendRunLogEntry } from "../../../../automation/run-log-service";
 
 const SYSTEM_PROMPT = `당신은 시니어 소프트웨어 요구사항 분석가입니다. Jira 티켓 설명을 분석하여 구조화된 요구사항을 추출하세요.
 
@@ -57,6 +57,13 @@ export async function analyze(state: PipelineStateType): Promise<Partial<Pipelin
   });
 
   try {
+    appendRunLogEntry({
+      level: "info",
+      step: "analyze",
+      node: "analyze",
+      message: "요구사항 분석을 위한 LLM 호출 시작"
+    });
+
     const { text } = await llm.invokeWithEvents(
       `${SYSTEM_PROMPT}\n\n---\n\nAnalyze the following ticket:\n\n${state.description}`,
       {
@@ -69,6 +76,13 @@ export async function analyze(state: PipelineStateType): Promise<Partial<Pipelin
         }
       }
     );
+
+    appendRunLogEntry({
+      level: "info",
+      step: "analyze",
+      node: "analyze",
+      message: `LLM 응답 수신 완료 (${text.length}자)`
+    });
 
     const result = safeParseJson(text, ParsedRequirementsSchema);
     if (!result.success) {

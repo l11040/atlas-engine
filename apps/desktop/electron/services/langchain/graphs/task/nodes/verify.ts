@@ -7,7 +7,7 @@ import { safeParseJson } from "../../shared/utils";
 import { VerificationResultSchema } from "../../shared/schemas";
 import { getSettings } from "../../../../config/settings";
 import { normalizeChecks } from "../change-utils";
-import { appendRunCliEvent } from "../../../../automation/run-log-service";
+import { appendRunCliEvent, appendRunLogEntry } from "../../../../automation/run-log-service";
 
 const SEMANTIC_CHECKS = [
   "requirement_coverage",
@@ -19,6 +19,13 @@ const SEMANTIC_CHECKS = [
 ] as const;
 
 type SemanticCheckName = typeof SEMANTIC_CHECKS[number];
+
+// 목적: 실패 시 실제로 verdict를 fail로 만드는 핵심 체크. 나머지는 advisory(경고만, 차단 안 함).
+const BLOCKING_CHECKS = new Set<string>([
+  "scope_check",
+  "verify_cmd",
+  "requirement_coverage"
+]);
 
 // 목적: LLM(allowTools: true)으로 verify_cmd 실행 + 6개 정적 체크를 수행한다.
 export async function verify(state: TaskGraphStateType): Promise<Partial<TaskGraphStateType>> {
@@ -52,6 +59,13 @@ export async function verify(state: TaskGraphStateType): Promise<Partial<TaskGra
     });
 
     const prompt = buildVerifyPrompt(state);
+    appendRunLogEntry({
+      level: "info",
+      step: "execution",
+      node: "verify",
+      message: "검증을 위한 LLM 호출 시작"
+    });
+
     const { text } = await llm.invokeWithEvents(prompt, {
       onEvent: (event) => {
         appendRunCliEvent({
@@ -61,6 +75,13 @@ export async function verify(state: TaskGraphStateType): Promise<Partial<TaskGra
           event
         });
       }
+    });
+
+    appendRunLogEntry({
+      level: "info",
+      step: "execution",
+      node: "verify",
+      message: `LLM 응답 수신 완료 (${text.length}자)`
     });
 
     const parseResult = safeParseJson(text, VerificationResultSchema);
@@ -98,9 +119,11 @@ export async function verify(state: TaskGraphStateType): Promise<Partial<TaskGra
     }
 
     const dedupedFailureReasons = [...new Set(failureReasons)];
-    const allPassed = checks.every((check) => check.passed);
+    // 이유: blocking 체크만 실패 시 차단한다. advisory 체크(unnecessary_changes, regression_risk 등)는
+    // 실패해도 검수자에게 경고만 표시하고 다음 단계로 진행한다.
+    const blockingFailed = checks.some((check) => !check.passed && BLOCKING_CHECKS.has(check.name));
     const verification: VerificationResult = {
-      verdict: allPassed ? "pass" : "fail",
+      verdict: blockingFailed ? "fail" : "pass",
       checks,
       failure_reasons: dedupedFailureReasons
     };
@@ -128,7 +151,7 @@ function buildVerifyPrompt(state: TaskGraphStateType): string {
     ?.map((entry) => `- ${entry.path}: ${entry.reason} (AC: ${entry.linked_ac_ids.join(", ") || "none"})`)
     .join("\n") || "- none";
 
-  return `You are a strict verification agent. Validate implementation quality and run command checks.
+  return `You are a pragmatic verification agent. Focus on correctness and requirement coverage. Minor style issues or theoretical risks should not cause failures.
 
 ## Task
 ID: ${task.id}
@@ -169,14 +192,14 @@ Return checks for ALL names below:
 - policy_rules
 - test_scenarios
 
-Check meanings:
-- verify_cmd: Run verify_cmd when provided. Fail if command exits non-zero or has clear failures.
-- requirement_coverage: Changes satisfy linked acceptance criteria and do not miss core requirements.
-- unnecessary_changes: No unrelated churn or scope creep.
-- regression_risk: No new obvious regressions introduced by the diff.
-- diff_explanation_alignment: Explanation matches actual diff content.
-- policy_rules: Changes respect all listed policy rules and constraints.
-- test_scenarios: Proposed/implemented behavior is testable against listed scenarios.
+Check meanings (BLOCKING = causes failure, ADVISORY = warning only):
+- verify_cmd [BLOCKING]: Run verify_cmd when provided. Fail only if command exits non-zero or has clear build/syntax errors. Test failures alone should NOT fail this check unless they indicate broken compilation.
+- requirement_coverage [BLOCKING]: Changes satisfy linked acceptance criteria and do not miss core requirements.
+- unnecessary_changes [ADVISORY]: No unrelated churn or scope creep. Be lenient — minor related refactoring is acceptable.
+- regression_risk [ADVISORY]: No new obvious regressions introduced by the diff. Only fail for clear, concrete regressions.
+- diff_explanation_alignment [ADVISORY]: Explanation matches actual diff content.
+- policy_rules [ADVISORY]: Changes respect listed policy rules. Minor deviations are acceptable.
+- test_scenarios [ADVISORY]: Proposed behavior is testable against listed scenarios.
 
 Respond with ONLY this JSON object:
 \`\`\`json

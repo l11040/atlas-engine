@@ -6,7 +6,7 @@ import { CliLlm } from "../../../cli-llm";
 import { safeParseJson } from "../../shared/utils";
 import { ChangeExplanationSchema } from "../../shared/schemas";
 import { getSettings } from "../../../../config/settings";
-import { appendRunCliEvent } from "../../../../automation/run-log-service";
+import { appendRunCliEvent, appendRunLogEntry } from "../../../../automation/run-log-service";
 
 // 목적: LLM(allowTools: false)으로 변경 사항을 분석하여 구조화된 설명을 생성한다.
 export async function explain(state: TaskGraphStateType): Promise<Partial<TaskGraphStateType>> {
@@ -36,6 +36,13 @@ export async function explain(state: TaskGraphStateType): Promise<Partial<TaskGr
     });
 
     const prompt = buildExplainPrompt(task, changeSets);
+    appendRunLogEntry({
+      level: "info",
+      step: "execution",
+      node: "explain",
+      message: "변경 설명 생성을 위한 LLM 호출 시작"
+    });
+
     const { text } = await llm.invokeWithEvents(prompt, {
       onEvent: (event) => {
         appendRunCliEvent({
@@ -45,6 +52,13 @@ export async function explain(state: TaskGraphStateType): Promise<Partial<TaskGr
           event
         });
       }
+    });
+
+    appendRunLogEntry({
+      level: "info",
+      step: "execution",
+      node: "explain",
+      message: `LLM 응답 수신 완료 (${text.length}자)`
     });
 
     const result = safeParseJson(text, ChangeExplanationSchema);

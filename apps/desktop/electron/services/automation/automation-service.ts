@@ -15,7 +15,7 @@ import type {
 } from "../../../shared/ipc";
 import { getSettings } from "../config/settings";
 import { applyTracingEnv, clearTracingEnv } from "../langchain/tracing-env";
-import { buildPipelineGraph } from "../langchain/graphs/pipeline/index";
+import { buildPipelineGraph, type PipelineEntryNode } from "../langchain/graphs/pipeline/index";
 import { buildTaskGraph } from "../langchain/graphs/task/index";
 import { getRunState, saveRunState, clearRunState } from "./run-state-store";
 import { getAllTaskStates, getTaskState, saveTaskState, clearTaskStates } from "./task-state-store";
@@ -61,6 +61,15 @@ function updateRun(patch: Partial<RunState>): void {
   saveRunState(state);
 }
 
+// 목적: 파이프라인 단계 순서를 정의한다. startFromStep에서 스킵 판별에 사용한다.
+const STEP_ORDER: RunState["currentStep"][] = [
+  "idle", "ingestion", "analyze", "risk", "plan", "execution", "archiving", "done"
+];
+
+function stepIndex(step: RunState["currentStep"]): number {
+  return STEP_ORDER.indexOf(step);
+}
+
 // 목적: 새 Run을 시작한다. 이미 실행 중이면 거부한다.
 export function startRun(request: RunStartRequest): RunStartResponse {
   const current = getRunState();
@@ -72,20 +81,45 @@ export function startRun(request: RunStartRequest): RunStartResponse {
     };
   }
 
+  const startFrom = request.startFromStep ?? "ingestion";
+
+  // 목적: 이전 Run의 태스크 상태를 캡처한다. 재실행 시 각 태스크에 이전 상태를 기록한다.
+  const prev = current;
+  let prevTaskStates: Record<string, TaskExecutionState> = {};
+  if (prev && prev.ticketId === request.ticketId) {
+    prevTaskStates = getAllTaskStates(prev.runId);
+  }
+
   const state = createInitialRunState(request.ticketId);
   state.status = "running";
-  state.currentStep = "ingestion";
+  state.currentStep = startFrom;
   state.startedAt = Date.now();
+
+  if (prev && prev.ticketId === request.ticketId && stepIndex(startFrom) > stepIndex("ingestion")) {
+    // 이유: 스킵된 단계의 결과를 이전 Run에서 복사한다.
+    if (stepIndex(startFrom) > stepIndex("analyze")) {
+      state.parsedRequirements = prev.parsedRequirements;
+    }
+    if (stepIndex(startFrom) > stepIndex("risk")) {
+      state.riskAssessment = prev.riskAssessment;
+    }
+    if (stepIndex(startFrom) > stepIndex("plan")) {
+      state.executionPlan = prev.executionPlan;
+    }
+  }
+
   saveRunState(state);
   appendRunLog({
     level: "info",
     step: "system",
     node: "start",
-    message: `티켓 ${request.ticketId}에 대한 Run 시작`
+    message: startFrom === "ingestion"
+      ? `티켓 ${request.ticketId}에 대한 Run 시작`
+      : `티켓 ${request.ticketId}에 대한 Run 시작 (${startFrom}부터)`
   });
 
   // 이유: fire-and-forget — 백그라운드에서 실행하고 즉시 응답을 반환한다.
-  executeRunAsync(state.runId).catch((err) => {
+  executeRunAsync(state.runId, startFrom, prevTaskStates).catch((err) => {
     console.error("[automation] run execution failed", err);
   });
 
@@ -151,9 +185,16 @@ export function cancelTask(_taskId: string): void {
 // ──────────────────────────────────────────────
 
 // 목적: 파이프라인 그래프 → 태스크 그래프 순서로 전체 Run을 실행한다.
-async function executeRunAsync(runId: string): Promise<void> {
+// startFrom: 지정된 단계부터 실행을 시작한다. 이전 단계는 스킵한다.
+async function executeRunAsync(
+  runId: string,
+  startFrom: RunState["currentStep"] = "ingestion",
+  prevTaskStates: Record<string, TaskExecutionState> = {}
+): Promise<void> {
   const settings = getSettings();
   activeAbort = new AbortController();
+
+  const shouldRun = (step: RunState["currentStep"]) => stepIndex(step) >= stepIndex(startFrom);
 
   try {
     applyTracingEnv(settings.tracing);
@@ -161,42 +202,59 @@ async function executeRunAsync(runId: string): Promise<void> {
       level: "info",
       step: "system",
       node: "execute",
-      message: `Run 실행 루프 시작 (${runId})`
+      message: startFrom === "ingestion"
+        ? `Run 실행 루프 시작 (${runId})`
+        : `Run 실행 루프 시작 (${runId}, ${startFrom}부터)`
     });
 
     // ── 1단계: 파이프라인 그래프 실행 (수집 → 해석 → 위험 → 계획) ──
-    await executePipelinePhase();
+    // 목적: startFrom이 execution 이후이면 파이프라인 단계를 통째로 스킵한다.
+    if (shouldRun("ingestion") || shouldRun("analyze") || shouldRun("risk") || shouldRun("plan")) {
+      if (stepIndex(startFrom) <= stepIndex("plan")) {
+        await executePipelinePhase(startFrom);
 
-    const runAfterPipeline = getRunState();
-    if (!runAfterPipeline || runAfterPipeline.status !== "running") return;
-    if (!runAfterPipeline.executionPlan) {
-      updateRun({ status: "failed", error: "실행 계획 생성 실패", endedAt: Date.now() });
-      appendRunLog({
-        level: "error",
-        step: "plan",
-        node: "plan",
-        message: "파이프라인이 실행 계획 없이 완료되었습니다"
-      });
-      return;
+        const runAfterPipeline = getRunState();
+        if (!runAfterPipeline || runAfterPipeline.status !== "running") return;
+        if (!runAfterPipeline.executionPlan) {
+          updateRun({ status: "failed", error: "실행 계획 생성 실패", endedAt: Date.now() });
+          appendRunLog({
+            level: "error",
+            step: "plan",
+            node: "plan",
+            message: "파이프라인이 실행 계획 없이 완료되었습니다"
+          });
+          return;
+        }
+      }
     }
 
     // ── 2단계: 태스크 그래프 실행 (execution_order에 따라 순차 실행) ──
-    updateRun({ currentStep: "execution" });
-    appendRunLog({
-      level: "info",
-      step: "execution",
-      node: "tasks",
-      message: `${runAfterPipeline.executionPlan.execution_order.length}개 작업 실행 시작`
-    });
-    await executeTasksPhase(
-      runId,
-      runAfterPipeline.executionPlan.tasks,
-      runAfterPipeline.executionPlan.execution_order,
-      runAfterPipeline.parsedRequirements
-    );
+    if (shouldRun("execution")) {
+      const runBeforeTasks = getRunState();
+      if (!runBeforeTasks || runBeforeTasks.status !== "running") return;
+      if (!runBeforeTasks.executionPlan) {
+        updateRun({ status: "failed", error: "실행 계획이 없습니다", endedAt: Date.now() });
+        return;
+      }
 
-    const runAfterTasks = getRunState();
-    if (!runAfterTasks || runAfterTasks.status !== "running") return;
+      updateRun({ currentStep: "execution" });
+      appendRunLog({
+        level: "info",
+        step: "execution",
+        node: "tasks",
+        message: `${runBeforeTasks.executionPlan.execution_order.length}개 작업 실행 시작`
+      });
+      await executeTasksPhase(
+        runId,
+        runBeforeTasks.executionPlan.tasks,
+        runBeforeTasks.executionPlan.execution_order,
+        runBeforeTasks.parsedRequirements,
+        prevTaskStates
+      );
+
+      const runAfterTasks = getRunState();
+      if (!runAfterTasks || runAfterTasks.status !== "running") return;
+    }
 
     // ── 3단계: 아카이빙 ──
     updateRun({ currentStep: "archiving" });
@@ -232,12 +290,24 @@ async function executeRunAsync(runId: string): Promise<void> {
   }
 }
 
+// 목적: RunStep을 파이프라인 그래프의 진입 노드로 변환한다.
+function stepToEntryNode(step: RunState["currentStep"]): PipelineEntryNode {
+  const map: Partial<Record<RunState["currentStep"], PipelineEntryNode>> = {
+    ingestion: "ingest",
+    analyze: "analyze",
+    risk: "assess_risk",
+    plan: "plan"
+  };
+  return map[step] ?? "ingest";
+}
+
 // 목적: 파이프라인 그래프를 스트림으로 실행하고, 각 노드 완료 시 RunState를 갱신한다.
-async function executePipelinePhase(): Promise<void> {
+async function executePipelinePhase(startFrom: RunState["currentStep"] = "ingestion"): Promise<void> {
   const state = getRunState();
   if (!state) return;
 
-  const pipeline = buildPipelineGraph();
+  const entryNode = stepToEntryNode(startFrom);
+  const pipeline = buildPipelineGraph(entryNode);
 
   const nodeToStep: Record<string, RunState["currentStep"]> = {
     ingest: "ingestion",
@@ -246,35 +316,31 @@ async function executePipelinePhase(): Promise<void> {
     plan: "plan"
   };
 
+  // 목적: 이전 Run에서 복사된 데이터를 그래프 초기 상태에 주입한다.
+  const initialState: Record<string, unknown> = {
+    ticketId: state.ticketId,
+    description: ""
+  };
+  if (state.parsedRequirements) initialState.parsedRequirements = state.parsedRequirements;
+  if (state.riskAssessment) initialState.riskAssessment = state.riskAssessment;
+
   const stream = await pipeline.stream(
-    { ticketId: state.ticketId, description: "" },
+    initialState,
     { signal: activeAbort?.signal, streamMode: "updates" }
   );
 
-  let lastNodeUpdateAt = Date.now();
-  const heartbeatTimer = setInterval(() => {
-    const current = getRunState();
-    if (!current || current.status !== "running") return;
-    const elapsedSec = Math.floor((Date.now() - lastNodeUpdateAt) / 1000);
-    appendRunLog({
-      level: "info",
-      step: current.currentStep === "idle" ? "system" : current.currentStep,
-      node: "heartbeat",
-      message: `노드 출력 대기 중... (${elapsedSec}초)`
-    });
-  }, 15_000);
-
   appendRunLog({
     level: "info",
-    step: "ingestion",
+    step: startFrom === "ingestion" ? "ingestion" : startFrom,
     node: "pipeline",
-    message: "파이프라인 그래프 스트림 시작"
+    message: entryNode === "ingest"
+      ? "파이프라인 그래프 스트림 시작"
+      : `파이프라인 그래프 스트림 시작 (${entryNode}부터)`
   });
 
   try {
     for await (const update of stream) {
       for (const [nodeName, nodeOutput] of Object.entries(update)) {
-        lastNodeUpdateAt = Date.now();
         const step = nodeToStep[nodeName];
         if (step) updateRun({ currentStep: step });
         appendRunLog({
@@ -351,9 +417,31 @@ async function executePipelinePhase(): Promise<void> {
         }
       }
     }
-  } finally {
-    clearInterval(heartbeatTimer);
+  } finally { /* stream 종료 */ }
+}
+
+// 목적: 이전 태스크 상태를 사람이 읽기 쉬운 재실행 사유로 요약한다.
+function summarizePrevTaskState(prev: TaskExecutionState): string {
+  const parts: string[] = [];
+
+  if (prev.status === "failed") {
+    parts.push(`이전 실행 실패: ${prev.error ?? "알 수 없는 오류"}`);
+  } else if (prev.status === "rejected") {
+    parts.push(`이전 실행 반려: ${prev.approval?.reason ?? "사유 없음"}`);
+  } else if (prev.status === "completed") {
+    parts.push("이전 실행 완료 — 재실행 요청됨");
+  } else {
+    parts.push(`이전 상태: ${prev.status}`);
   }
+
+  if (prev.verification?.verdict === "fail" && prev.verification.failure_reasons.length > 0) {
+    parts.push(`검증 실패: ${prev.verification.failure_reasons.join("; ")}`);
+  }
+  if (prev.postVerification?.verdict === "fail" && prev.postVerification.failure_reasons.length > 0) {
+    parts.push(`회귀 검증 실패: ${prev.postVerification.failure_reasons.join("; ")}`);
+  }
+
+  return parts.join(" | ");
 }
 
 // 목적: execution_order에 따라 태스크 그래프를 순차 실행한다.
@@ -361,7 +449,8 @@ async function executeTasksPhase(
   runId: string,
   tasks: TaskUnit[],
   executionOrder: string[],
-  parsedRequirements: ParsedRequirements | null
+  parsedRequirements: ParsedRequirements | null,
+  prevTaskStates: Record<string, TaskExecutionState> = {}
 ): Promise<void> {
   const taskMap = new Map(tasks.map((t) => [t.id, t]));
 
@@ -407,6 +496,17 @@ async function executeTasksPhase(
       node: "task",
       message: `작업 시작: ${task.title}`
     });
+
+    // 목적: 재실행 시 이전 태스크 상태를 요약하여 로그에 남긴다.
+    const prevState = prevTaskStates[task.id];
+    if (prevState) {
+      appendTaskLog({
+        level: "info",
+        node: "task",
+        message: `재실행 사유: ${summarizePrevTaskState(prevState)}`
+      });
+    }
+
     saveTaskState(runId, taskState);
     appendRunLog({
       level: "info",

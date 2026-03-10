@@ -5,7 +5,7 @@ import type { ChangeSet } from "../../../../../../shared/ipc";
 import { CliLlm } from "../../../cli-llm";
 import { getSettings } from "../../../../config/settings";
 import { getGitDiff } from "../../../../git/diff";
-import { appendRunCliEvent } from "../../../../automation/run-log-service";
+import { appendRunCliEvent, appendRunLogEntry } from "../../../../automation/run-log-service";
 import {
   buildUnifiedDiff,
   detectScopeViolations,
@@ -29,6 +29,13 @@ export async function generate(state: TaskGraphStateType): Promise<Partial<TaskG
     });
 
     const prompt = buildGeneratePrompt(task);
+    appendRunLogEntry({
+      level: "info",
+      step: "execution",
+      node: "generate",
+      message: "코드 생성을 위한 LLM 호출 시작"
+    });
+
     await llm.invokeWithEvents(prompt, {
       onEvent: (event) => {
         appendRunCliEvent({
@@ -38,6 +45,13 @@ export async function generate(state: TaskGraphStateType): Promise<Partial<TaskG
           event
         });
       }
+    });
+
+    appendRunLogEntry({
+      level: "info",
+      step: "execution",
+      node: "generate",
+      message: "LLM 코드 생성 완료"
     });
 
     // 목적: CLI 실행 후 git diff로 실제 변경 사항을 캡처한다.

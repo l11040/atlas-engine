@@ -6,7 +6,7 @@ import { CliLlm } from "../../../cli-llm";
 import { safeParseJson } from "../../shared/utils";
 import { VerificationResultSchema } from "../../shared/schemas";
 import { getSettings } from "../../../../config/settings";
-import { appendRunCliEvent } from "../../../../automation/run-log-service";
+import { appendRunCliEvent, appendRunLogEntry } from "../../../../automation/run-log-service";
 
 // 목적: LLM(allowTools: true)으로 전체 빌드/테스트를 실행하여 회귀를 검출한다.
 export async function postVerify(state: TaskGraphStateType): Promise<Partial<TaskGraphStateType>> {
@@ -40,6 +40,13 @@ export async function postVerify(state: TaskGraphStateType): Promise<Partial<Tas
     });
 
     const prompt = buildPostVerifyPrompt(task);
+    appendRunLogEntry({
+      level: "info",
+      step: "execution",
+      node: "post_verify",
+      message: "커밋 후 검증을 위한 LLM 호출 시작"
+    });
+
     const { text } = await llm.invokeWithEvents(prompt, {
       onEvent: (event) => {
         appendRunCliEvent({
@@ -49,6 +56,13 @@ export async function postVerify(state: TaskGraphStateType): Promise<Partial<Tas
           event
         });
       }
+    });
+
+    appendRunLogEntry({
+      level: "info",
+      step: "execution",
+      node: "post_verify",
+      message: `LLM 응답 수신 완료 (${text.length}자)`
     });
 
     const parseResult = safeParseJson(text, VerificationResultSchema);

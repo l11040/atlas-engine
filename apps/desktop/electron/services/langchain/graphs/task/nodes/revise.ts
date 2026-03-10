@@ -5,7 +5,7 @@ import type { ChangeSet } from "../../../../../../shared/ipc";
 import { CliLlm } from "../../../cli-llm";
 import { getSettings } from "../../../../config/settings";
 import { getGitDiff } from "../../../../git/diff";
-import { appendRunCliEvent } from "../../../../automation/run-log-service";
+import { appendRunCliEvent, appendRunLogEntry } from "../../../../automation/run-log-service";
 import {
   buildFailureReport,
   buildUnifiedDiff,
@@ -30,6 +30,13 @@ export async function revise(state: TaskGraphStateType): Promise<Partial<TaskGra
     });
 
     const prompt = buildRevisePrompt(task, verification, changeSets);
+    appendRunLogEntry({
+      level: "info",
+      step: "execution",
+      node: "revise",
+      message: "코드 수정을 위한 LLM 호출 시작"
+    });
+
     await llm.invokeWithEvents(prompt, {
       onEvent: (event) => {
         appendRunCliEvent({
@@ -39,6 +46,13 @@ export async function revise(state: TaskGraphStateType): Promise<Partial<TaskGra
           event
         });
       }
+    });
+
+    appendRunLogEntry({
+      level: "info",
+      step: "execution",
+      node: "revise",
+      message: "LLM 코드 수정 완료"
     });
 
     // 목적: 수정 후 diff를 다시 캡처한다.

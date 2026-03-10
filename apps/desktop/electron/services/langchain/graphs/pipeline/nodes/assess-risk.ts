@@ -6,7 +6,7 @@ import { safeParseJson } from "../../shared/utils";
 import { RiskAssessmentSchema } from "../../shared/schemas";
 import type { RiskAssessment } from "../../../../../../shared/ipc";
 import type { PipelineStateType } from "../state";
-import { appendRunCliEvent } from "../../../../automation/run-log-service";
+import { appendRunCliEvent, appendRunLogEntry } from "../../../../automation/run-log-service";
 
 const SYSTEM_PROMPT = `당신은 시니어 소프트웨어 엔지니어로서 개발 작업의 위험도를 평가합니다. Jira 티켓의 파싱된 요구사항을 기반으로 위험 요소를 분석하고 구조화된 평가를 제공하세요.
 
@@ -72,6 +72,13 @@ export async function assessRisk(state: PipelineStateType): Promise<Partial<Pipe
 
   try {
     const requirementsContext = JSON.stringify(state.parsedRequirements, null, 2);
+    appendRunLogEntry({
+      level: "info",
+      step: "risk",
+      node: "assess_risk",
+      message: "위험 평가를 위한 LLM 호출 시작"
+    });
+
     const { text } = await llm.invokeWithEvents(
       `${SYSTEM_PROMPT}\n\n---\n\nAssess the risk for the following parsed requirements:\n\n${requirementsContext}`,
       {
@@ -84,6 +91,13 @@ export async function assessRisk(state: PipelineStateType): Promise<Partial<Pipe
         }
       }
     );
+
+    appendRunLogEntry({
+      level: "info",
+      step: "risk",
+      node: "assess_risk",
+      message: `LLM 응답 수신 완료 (${text.length}자)`
+    });
 
     const result = safeParseJson(text, RiskAssessmentSchema);
     if (!result.success) {

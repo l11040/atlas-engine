@@ -6,7 +6,7 @@ import { safeParseJson } from "../../shared/utils";
 import { ExecutionPlanSchema } from "../../shared/schemas";
 import type { ExecutionPlan } from "../../../../../../shared/ipc";
 import type { PipelineStateType } from "../state";
-import { appendRunCliEvent } from "../../../../automation/run-log-service";
+import { appendRunCliEvent, appendRunLogEntry } from "../../../../automation/run-log-service";
 
 const SYSTEM_PROMPT = `당신은 시니어 소프트웨어 아키텍트입니다. 파싱된 요구사항과 위험 평가를 기반으로 구체적이고 실행 가능한 계획을 수립하세요.
 
@@ -92,6 +92,13 @@ export async function plan(state: PipelineStateType): Promise<Partial<PipelineSt
       state.description || "(not available)"
     ].join("\n");
 
+    appendRunLogEntry({
+      level: "info",
+      step: "plan",
+      node: "plan",
+      message: "실행 계획 수립을 위한 LLM 호출 시작"
+    });
+
     const { text } = await llm.invokeWithEvents(
       `${SYSTEM_PROMPT}\n\n---\n\nCreate an execution plan for:\n\n${context}`,
       {
@@ -104,6 +111,13 @@ export async function plan(state: PipelineStateType): Promise<Partial<PipelineSt
         }
       }
     );
+
+    appendRunLogEntry({
+      level: "info",
+      step: "plan",
+      node: "plan",
+      message: `LLM 응답 수신 완료 (${text.length}자)`
+    });
 
     const result = safeParseJson(text, ExecutionPlanSchema);
     if (!result.success) {

@@ -482,6 +482,8 @@ export interface ApprovalRecord {
 
 export interface RunStartRequest {
   ticketId: string;
+  // 목적: 지정된 단계부터 실행을 시작한다. 이전 단계의 결과는 직전 Run에서 복사한다.
+  startFromStep?: RunStep;
 }
 
 export interface RunStartResponse {
