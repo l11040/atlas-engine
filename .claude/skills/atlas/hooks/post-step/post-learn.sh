@@ -11,7 +11,7 @@ load_env
 EVIDENCE_DIR="${AUTOMATION_PATH}/evidence"
 EVIDENCE_FILE="${EVIDENCE_DIR}/learn.validated.json"
 CONVENTIONS_FILE="${AUTOMATION_PATH}/conventions.json"
-START_TIME=$(date +%s%3N 2>/dev/null || date +%s000)
+START_TIME=$(now_ms)
 
 mkdir -p "$EVIDENCE_DIR"
 
@@ -39,7 +39,7 @@ fi
 # 목적: conventions.json 스키마 검증
 VALIDATION_OUTPUT=$(validate_json "conventions" "$CONVENTIONS_FILE" 2>&1) || {
   log_error "Schema validation failed: $VALIDATION_OUTPUT"
-  END_TIME=$(date +%s%3N 2>/dev/null || date +%s000)
+  END_TIME=$(now_ms)
   DURATION=$(( END_TIME - START_TIME ))
   cat > "$EVIDENCE_FILE" <<EOF
 {
@@ -60,7 +60,7 @@ EOF
   exit 1
 }
 
-END_TIME=$(date +%s%3N 2>/dev/null || date +%s000)
+END_TIME=$(now_ms)
 DURATION=$(( END_TIME - START_TIME ))
 
 # 목적: 검증 성공 증거 파일 생성

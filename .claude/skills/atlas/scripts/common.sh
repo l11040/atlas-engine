@@ -4,22 +4,30 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ATLAS_ROOT="${SCRIPT_DIR}/.."
-PROJECT_ROOT="${PROJECT_ROOT:-$(cd "$ATLAS_ROOT/../../../.." && pwd)}"
-AUTOMATION_DIR="${AUTOMATION_DIR:-.automation}"
-AUTOMATION_PATH="${PROJECT_ROOT}/${AUTOMATION_DIR}"
 
 # ── .env 로드 ──
+# 주의: load_env 후 PROJECT_ROOT가 갱신되므로 AUTOMATION_PATH도 재계산한다
 load_env() {
   local env_file="${1:-${ATLAS_ROOT}/.env}"
   if [ ! -f "$env_file" ]; then
-    echo "ERROR: .env file not found at $env_file" >&2
-    echo "Copy .env.example to .env in the atlas skill directory and fill in values" >&2
+    echo "ERROR: .env 파일이 없습니다: $env_file" >&2
     exit 1
   fi
   set -a
   source "$env_file"
   set +a
+  # 이유: .env의 PROJECT_ROOT를 반영하여 경로 재계산
+  _init_paths
 }
+
+_init_paths() {
+  PROJECT_ROOT="${PROJECT_ROOT:-$(cd "$ATLAS_ROOT/../../../.." && pwd)}"
+  AUTOMATION_DIR="${AUTOMATION_DIR:-.automation}"
+  AUTOMATION_PATH="${PROJECT_ROOT}/${AUTOMATION_DIR}"
+}
+
+# 목적: load_env 호출 전 기본값으로 초기화
+_init_paths
 
 # ── 로그 출력 ──
 log_info() {
@@ -134,6 +142,11 @@ ensure_automation_dir() {
 # ── 타임스탬프 ──
 now_iso() {
   date -u '+%Y-%m-%dT%H:%M:%SZ'
+}
+
+# 이유: macOS의 date는 %3N(밀리초)을 지원하지 않으므로 python3 폴백 사용
+now_ms() {
+  python3 -c "import time; print(int(time.time()*1000))" 2>/dev/null || echo "$(date +%s)000"
 }
 
 # ── UUID 생성 (8자리 hex) ──

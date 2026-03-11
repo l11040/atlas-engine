@@ -35,7 +35,7 @@
 | 스텝 | Hook | 검증 대상 | 스키마 |
 |------|------|----------|--------|
 | learn | `post-learn.sh` | conventions.json | conventions.schema.json |
-| analyze | `post-analyze.sh` | tasks/*/meta/task.json, decomposition-log.json | task-meta, etc. |
+| analyze | `post-analyze.sh` | tickets/{KEY}/ticket.json, tickets/{KEY}/dependency-graph.json, tasks/*/meta/task.json | jira-ticket, dependency-graph, task-meta |
 | plan | `post-plan.sh` | dependency-graph.json, execution-plan.json | dependency-graph, execution-plan |
 | execute | `post-execute.sh` | tasks/*/state/status.json, evidence/ | task-status, evidence-event |
 | complete | `post-complete.sh` | reports/report-*.json | (리포트 스키마) |

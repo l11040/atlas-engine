@@ -11,7 +11,7 @@
       "type": "string",
       "enum": [
         "backend:entity", "backend:migration", "backend:api", "backend:validation",
-        "backend:service", "backend:repository",
+        "backend:service", "backend:repository", "backend:batch",
         "frontend:component", "frontend:style", "frontend:page", "frontend:store",
         "frontend:api", "frontend:hook",
         "design:component", "design:screen", "design:export", "design:tokens",
