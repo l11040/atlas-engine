@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Task Meta",
+  "description": "Task의 메타데이터 정의",
+  "type": "object",
+  "required": ["task_id", "ticket_key", "type", "priority", "title", "description", "dependencies", "created_at"],
+  "properties": {
+    "task_id": { "type": "string", "pattern": "^TASK-[a-f0-9]{8}$" },
+    "ticket_key": { "type": "string" },
+    "type": {
+      "type": "string",
+      "enum": [
+        "backend:entity", "backend:migration", "backend:api", "backend:validation",
+        "backend:service", "backend:repository",
+        "frontend:component", "frontend:style", "frontend:page", "frontend:store",
+        "frontend:api", "frontend:hook",
+        "design:component", "design:screen", "design:export", "design:tokens",
+        "infra:docker", "infra:k8s", "infra:terraform", "infra:cicd",
+        "test:unit", "test:integration", "test:e2e"
+      ]
+    },
+    "priority": { "type": "string", "enum": ["critical", "high", "medium", "low"] },
+    "title": { "type": "string" },
+    "description": { "type": "string" },
+    "dependencies": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^TASK-[a-f0-9]{8}$" }
+    },
+    "expected_files": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "linked_ac_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "metadata": { "type": "object" },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

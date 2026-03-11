@@ -1,68 +1,46 @@
-# 아틀라스 — 티켓 기반 코드 자동화 파이프라인
+---
+name: atlas
+description: >
+  Jira 티켓을 분석하여 프로젝트 컨벤션에 맞는 코드를 자동 생성하는 5단계 파이프라인.
+  learn으로 컨벤션을 학습하고, analyze로 티켓을 Task로 분해하며, plan으로 실행 계획을 수립하고,
+  execute로 코드를 생성한다. 티켓 기반 자동화, 컨벤션 학습, 코드 생성, Task 분해가 필요할 때 사용.
+user-invocable: true
+argument-hint: "learn|analyze|plan|execute|complete [options]"
+---
 
-Jira 티켓을 입력으로 받아 요구사항 분석 → 계획 → 코드 생성 → 검증까지 자동 실행한다.
+# Atlas
 
-## 사용법
+Jira 티켓 → 코드 자동 생성 파이프라인: `/learn → /analyze → /plan → /execute → /complete`
 
-```
-/atlas                          전체 파이프라인 (티켓 키 입력 요청)
-/atlas GRID-123                 해당 티켓으로 전체 파이프라인
-/atlas --from=plan              plan 단계부터 재시작
-/atlas --step=analyze           analyze 단계만 단독 실행
-/atlas --step=execute --task=T1 특정 태스크만 실행
-```
+## 서브커맨드 라우팅
 
-## 환경 설정 확인
+현재 요청: `$ARGUMENTS`
 
-모든 실행 전에 `.harness/.env`를 검증한다.
+서브커맨드(`$0`)에 따라 해당 스킬 파일을 읽고 지시를 따른다:
+
+| 서브커맨드 | 스킬 파일               | 설명                                         |
+| ---------- | ----------------------- | -------------------------------------------- |
+| `learn`    | `skills/learn/learn.md` | 프로젝트 컨벤션 분석 → conventions.json 생성 |
+
+옵션(`$1` 이후)은 각 스킬 파일의 지시에 따라 처리한다.
+모든 상대 경로는 이 SKILL.md가 위치한 디렉토리(`${CLAUDE_SKILL_DIR}`) 기준이다.
+
+## 실행 규칙
+
+1. **스킬 파일을 먼저 읽는다**: 서브커맨드에 해당하는 스킬 파일(`skills/<subcmd>/`)을 읽고 그 지시를 따른다.
+2. **스키마를 따른다**: 산출물 생성 시 `schemas/` 하위의 해당 스키마를 읽어서 구조를 확인한다.
+3. **증거를 남긴다**: 스텝 완료 후 post-step Hook 스크립트를 Bash로 실행하여 산출물을 스키마 검증하고 `.automation/evidence/{step}.validated.json`을 생성한다.
+4. **다음 스텝은 증거만 확인한다**: 스텝 시작 전 pre-step Hook 스크립트를 실행하여 이전 스텝의 증거 파일 존재 + `status=validated`를 확인한다.
+
+## 환경 설정
+
+스킬 루트에 `.env`가 없으면 `.env.example`을 복사하고 값을 채운다:
 
 ```bash
-python3 .claude/skills/atlas/atlas.py env --require=TARGET_PROJECT_DIR
+cp ${CLAUDE_SKILL_DIR}/.env.example ${CLAUDE_SKILL_DIR}/.env
 ```
 
-실패 시 사용자에게 `.harness/.env` 설정을 요청하고 중단한다.
+## 참조 문서
 
-## 파이프라인 순서
-
-```
-ingest → analyze → plan → execute → verify
-```
-
-각 단계의 상세 지침은 같은 폴더의 개별 파일을 참조한다:
-
-| 단계 | 파일 | 입력 | 출력 |
-|------|------|------|------|
-| **ingest** | `.claude/skills/atlas/ingest.md` | Jira 티켓 키 | `.harness/ticket.json` |
-| **analyze** | `.claude/skills/atlas/analyze.md` | ticket.json | `.harness/requirements.json`, `.harness/risk.json` |
-| **plan** | `.claude/skills/atlas/plan.md` | requirements.json, risk.json | `.harness/plan.json` |
-| **execute** | `.claude/skills/atlas/execute.md` | plan.json | `.harness/tasks/*.json` + 코드 변경 |
-| **verify** | `.claude/skills/atlas/verify.md` | plan.json | `.harness/verify.json` |
-
-## 실행 방식
-
-### 전체 파이프라인
-1. 환경 설정 확인
-2. `.claude/skills/atlas/ingest.md`의 지침을 읽고 실행
-3. `.claude/skills/atlas/analyze.md`의 지침을 읽고 실행
-4. `.claude/skills/atlas/plan.md`의 지침을 읽고 실행
-5. `.claude/skills/atlas/execute.md`의 지침을 읽고 실행
-6. `.claude/skills/atlas/verify.md`의 지침을 읽고 실행
-
-### `--step=<name>` (단독 실행)
-해당 단계의 md 파일만 읽고 실행한다. 이전 단계 출력 파일이 없으면 에러.
-
-### `--from=<name>` (재시작)
-해당 단계부터 끝까지 순차 실행한다. 이전 단계 출력 파일을 재활용한다.
-
-| `--from` | 필요한 기존 파일 |
-|----------|-----------------|
-| analyze | ticket.json |
-| plan | ticket.json, requirements.json, risk.json |
-| execute | 위 + plan.json |
-| verify | 위 + tasks/*.json |
-
-## 공통 규칙
-
-- **모든 코드 읽기/쓰기는 `TARGET_PROJECT_DIR` 안에서만** 수행한다.
-- `.harness/` 안의 JSON 파일만 atlas-engine 저장소에 쓴다.
-- 각 단계 완료 후 사용자에게 간략한 결과 요약을 보여준다.
+- [Hook 아키텍처](references/hook-architecture.md) — post-step/pre-step Hook 구조
+- [컨벤션 레이어](references/convention-layers.md) — Layer 0~4 우선순위 규칙

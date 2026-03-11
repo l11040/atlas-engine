@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Workflow State",
+  "description": "전체 워크플로우의 현재 상태",
+  "type": "object",
+  "required": ["session_id", "ticket_key", "status", "current_step", "task_ids", "created_at", "updated_at"],
+  "properties": {
+    "session_id": { "type": "string" },
+    "ticket_key": { "type": "string" },
+    "status": { "type": "string", "enum": ["INITIALIZING", "RUNNING", "PAUSED", "COMPLETED", "FAILED"] },
+    "current_step": { "type": "string", "enum": ["learn", "analyze", "plan", "execute", "complete"] },
+    "iteration": { "type": "integer", "minimum": 1 },
+    "task_ids": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^TASK-[a-f0-9]{8}$" }
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

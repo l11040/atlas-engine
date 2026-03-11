@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Evidence Event",
+  "description": "Task 완료 시 생성되는 증거 이벤트",
+  "type": "object",
+  "required": ["event_id", "task_id", "type", "timestamp", "data"],
+  "properties": {
+    "event_id": { "type": "string" },
+    "task_id": { "type": "string", "pattern": "^TASK-[a-f0-9]{8}$" },
+    "type": {
+      "type": "string",
+      "enum": ["code_generated", "test_passed", "review_approved", "committed", "validation_failed", "retry"]
+    },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "data": { "type": "object" }
+  },
+  "additionalProperties": false
+}

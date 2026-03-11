@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Conventions",
+  "description": "프로젝트 컨벤션 분석 결과. /learn이 생성하고 이후 모든 스텝이 참조한다.",
+  "type": "object",
+  "required": ["version", "generated_at", "scope", "stack", "naming", "style", "annotations", "patterns", "forbidden", "required", "lint_rules", "convention_skills_applied", "learned_from_failures"],
+  "properties": {
+    "version": { "type": "string", "const": "1.0" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "scope": {
+      "type": "string",
+      "description": "이 conventions.json이 적용되는 범위 (예: project-root, server/core, apps/web)"
+    },
+    "stack": {
+      "type": "object",
+      "required": ["language", "framework", "build"],
+      "properties": {
+        "language": { "type": "string", "description": "주 언어 (예: java, typescript, go)" },
+        "version": { "type": "string", "description": "언어 버전 (예: 17, 5.3)" },
+        "framework": { "type": "string", "description": "주 프레임워크:버전 (예: spring-boot:3.2.1, next:14.1)" },
+        "build": { "type": "string", "description": "빌드 도구 (예: gradle, pnpm, cargo)" }
+      },
+      "additionalProperties": true
+    },
+    "naming": {
+      "type": "object",
+      "description": "네이밍 컨벤션. 키는 대상(entity, service 등), 값은 한 줄 규칙",
+      "additionalProperties": { "type": "string" }
+    },
+    "style": {
+      "type": "object",
+      "description": "코드 스타일 규칙",
+      "properties": {
+        "indent": { "type": "string", "description": "예: 4 spaces, 2 spaces, tab" },
+        "max_line_length": { "type": "integer" },
+        "braces": { "type": "string", "description": "예: same line, next line" },
+        "imports": { "type": "string", "description": "예: no wildcard, static imports last" }
+      },
+      "additionalProperties": { "type": "string" }
+    },
+    "annotations": {
+      "type": "object",
+      "description": "레이어별 자주 사용되는 어노테이션/데코레이터 목록",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    },
+    "patterns": {
+      "type": "object",
+      "description": "프로젝트에서 사용하는 디자인/구현 패턴. 키는 패턴명, 값은 한 줄 설명",
+      "additionalProperties": { "type": "string" }
+    },
+    "forbidden": {
+      "type": "array",
+      "description": "하면 안 되는 것 — 명시적 금지 목록. 한 줄로 명확하게",
+      "items": { "type": "string" }
+    },
+    "required": {
+      "type": "array",
+      "description": "반드시 해야 하는 것 — 명시적 필수 목록. 한 줄로 명확하게",
+      "items": { "type": "string" }
+    },
+    "lint_rules": {
+      "type": "object",
+      "properties": {
+        "source": { "type": "string", "description": "린트 설정 파일 경로 (예: .checkstyle.xml, .eslintrc.js)" },
+        "key_rules": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "핵심 린트 규칙 요약"
+        }
+      },
+      "additionalProperties": false
+    },
+    "convention_skills_applied": {
+      "type": "array",
+      "description": "Layer 2에서 감지·적용된 외부 컨벤션 스킬 목록",
+      "items": { "type": "string" }
+    },
+    "learned_from_failures": {
+      "type": "array",
+      "description": "Review 실패로 추가된 규칙 추적 로그. 초기 생성 시 빈 배열",
+      "items": {
+        "type": "object",
+        "required": ["rule", "added_to", "learned_at", "source"],
+        "properties": {
+          "rule": { "type": "string" },
+          "added_to": { "type": "string", "enum": ["required", "forbidden"] },
+          "learned_at": { "type": "string", "format": "date-time" },
+          "source": { "type": "string", "description": "예: TASK-abc12345 review failure" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

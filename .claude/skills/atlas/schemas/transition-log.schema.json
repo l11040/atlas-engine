@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Transition Log",
+  "description": "Task 상태 전이 로그",
+  "type": "object",
+  "required": ["task_id", "transitions"],
+  "properties": {
+    "task_id": { "type": "string", "pattern": "^TASK-[a-f0-9]{8}$" },
+    "transitions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["from", "to", "timestamp", "trigger"],
+        "properties": {
+          "from": { "type": "string" },
+          "to": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "trigger": { "type": "string" },
+          "hook_result": { "type": "string", "enum": ["passed", "failed", "skipped"] },
+          "details": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
