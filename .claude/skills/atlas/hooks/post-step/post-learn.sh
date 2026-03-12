@@ -15,69 +15,54 @@ START_TIME=$(now_ms)
 
 mkdir -p "$EVIDENCE_DIR"
 
+# ── 헬퍼: 증거 파일 생성 (jq 사용으로 malformed JSON 방지) ──
+write_evidence() {
+  local status="$1" valid="$2" error="${3:-}"
+  local end_time
+  end_time=$(now_ms)
+  local duration=$(( end_time - START_TIME ))
+
+  if [ -n "$error" ]; then
+    jq -n \
+      --arg step "learn" \
+      --arg status "$status" \
+      --arg validated_at "$(now_iso)" \
+      --arg file "$CONVENTIONS_FILE" \
+      --arg schema "conventions" \
+      --argjson valid "$valid" \
+      --arg error "$error" \
+      --argjson duration "$duration" \
+      '{step: $step, status: $status, validated_at: $validated_at, outputs: [{file: $file, schema: $schema, valid: $valid, error: $error}], duration_ms: $duration}' \
+      > "$EVIDENCE_FILE"
+  else
+    jq -n \
+      --arg step "learn" \
+      --arg status "$status" \
+      --arg validated_at "$(now_iso)" \
+      --arg file "$CONVENTIONS_FILE" \
+      --arg schema "conventions" \
+      --argjson valid "$valid" \
+      --argjson duration "$duration" \
+      '{step: $step, status: $status, validated_at: $validated_at, outputs: [{file: $file, schema: $schema, valid: $valid}], duration_ms: $duration}' \
+      > "$EVIDENCE_FILE"
+  fi
+}
+
 # 목적: conventions.json 존재 확인
 if [ ! -f "$CONVENTIONS_FILE" ]; then
   log_error "conventions.json not found: $CONVENTIONS_FILE"
-  cat > "$EVIDENCE_FILE" <<EOF
-{
-  "step": "learn",
-  "status": "failed",
-  "validated_at": "$(now_iso)",
-  "outputs": [
-    {
-      "file": "$CONVENTIONS_FILE",
-      "schema": "conventions",
-      "valid": false,
-      "error": "File not found"
-    }
-  ]
-}
-EOF
+  write_evidence "failed" "false" "File not found"
   exit 1
 fi
 
 # 목적: conventions.json 스키마 검증
 VALIDATION_OUTPUT=$(validate_json "conventions" "$CONVENTIONS_FILE" 2>&1) || {
   log_error "Schema validation failed: $VALIDATION_OUTPUT"
-  END_TIME=$(now_ms)
-  DURATION=$(( END_TIME - START_TIME ))
-  cat > "$EVIDENCE_FILE" <<EOF
-{
-  "step": "learn",
-  "status": "failed",
-  "validated_at": "$(now_iso)",
-  "outputs": [
-    {
-      "file": "$CONVENTIONS_FILE",
-      "schema": "conventions",
-      "valid": false,
-      "error": "$VALIDATION_OUTPUT"
-    }
-  ],
-  "duration_ms": $DURATION
-}
-EOF
+  write_evidence "failed" "false" "$VALIDATION_OUTPUT"
   exit 1
 }
 
-END_TIME=$(now_ms)
-DURATION=$(( END_TIME - START_TIME ))
-
 # 목적: 검증 성공 증거 파일 생성
-cat > "$EVIDENCE_FILE" <<EOF
-{
-  "step": "learn",
-  "status": "validated",
-  "validated_at": "$(now_iso)",
-  "outputs": [
-    {
-      "file": "$CONVENTIONS_FILE",
-      "schema": "conventions",
-      "valid": true
-    }
-  ],
-  "duration_ms": $DURATION
-}
-EOF
+write_evidence "validated" "true"
 
 log_info "post-learn: conventions.json validated → ${EVIDENCE_FILE}"

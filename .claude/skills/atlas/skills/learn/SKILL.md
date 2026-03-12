@@ -1,3 +1,11 @@
+---
+name: learn
+description: >
+  프로젝트 코드 컨벤션을 분석하여 conventions.json을 생성한다.
+  설정 파일, 기존 코드, CLAUDE.md에서 네이밍·스타일·패턴 규칙을 추출한다.
+disable-model-invocation: true
+---
+
 # /learn — 프로젝트 컨벤션 분석
 
 ## 목적

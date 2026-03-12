@@ -2,7 +2,12 @@
 # 목적: 모든 스크립트와 Hook이 공유하는 헬퍼 함수 모음
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 주의: 인라인 source 시 BASH_SOURCE가 비어있을 수 있다
+if [ -n "${BASH_SOURCE[0]:-}" ]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+  SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+fi
 ATLAS_ROOT="${SCRIPT_DIR}/.."
 
 # ── .env 로드 ──
@@ -29,6 +34,47 @@ _init_paths() {
 # 목적: load_env 호출 전 기본값으로 초기화
 _init_paths
 
+# ── Run 관리 ──
+# 목적: runs.json에서 활성 run ID를 조회한다
+resolve_run() {
+  local ticket_key="$1"
+  local runs_file="${AUTOMATION_PATH}/runs.json"
+  if [ ! -f "$runs_file" ]; then
+    echo ""
+    return
+  fi
+  jq -r --arg k "$ticket_key" '.active_runs[$k] // ""' "$runs_file" 2>/dev/null
+}
+
+# 목적: 새 run 디렉토리를 생성하고 runs.json에 등록한다
+create_run() {
+  local ticket_key="$1"
+  local hash
+  hash=$(openssl rand -hex 4)
+  local run_id="${ticket_key}-${hash}"
+  local run_dir="${AUTOMATION_PATH}/runs/${run_id}"
+  local runs_file="${AUTOMATION_PATH}/runs.json"
+
+  mkdir -p "$run_dir"
+  mkdir -p "${run_dir}/tasks"
+  mkdir -p "${run_dir}/evidence"
+
+  # runs.json 갱신
+  if [ ! -f "$runs_file" ]; then
+    echo '{"active_runs":{}}' > "$runs_file"
+  fi
+  local tmp="${runs_file}.tmp"
+  jq --arg k "$ticket_key" --arg v "$run_id" '.active_runs[$k] = $v' "$runs_file" > "$tmp" && mv "$tmp" "$runs_file"
+
+  echo "$run_id"
+}
+
+# 목적: run ID에서 run 디렉토리 경로를 반환한다
+run_dir_path() {
+  local run_id="$1"
+  echo "${AUTOMATION_PATH}/runs/${run_id}"
+}
+
 # ── 로그 출력 ──
 log_info() {
   echo "[INFO] $(date '+%Y-%m-%d %H:%M:%S') $*"
@@ -43,9 +89,10 @@ log_error() {
 }
 
 # ── Task 관련 경로 헬퍼 ──
+# 주의: RUN_DIR 환경변수가 설정되어 있어야 한다
 task_dir() {
   local task_id="$1"
-  echo "${AUTOMATION_PATH}/tasks/${task_id}"
+  echo "${RUN_DIR}/tasks/${task_id}"
 }
 
 task_meta() {
@@ -134,9 +181,8 @@ validate_json() {
 # ── 디렉토리 초기화 ──
 ensure_automation_dir() {
   mkdir -p "${AUTOMATION_PATH}"
-  mkdir -p "${AUTOMATION_PATH}/state"
-  mkdir -p "${AUTOMATION_PATH}/tasks"
-  mkdir -p "${AUTOMATION_PATH}/reports"
+  mkdir -p "${AUTOMATION_PATH}/runs"
+  mkdir -p "${AUTOMATION_PATH}/evidence"
 }
 
 # ── 타임스탬프 ──

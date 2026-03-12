@@ -7,7 +7,14 @@
   "properties": {
     "key": { "type": "string" },
     "summary": { "type": "string" },
-    "description": { "type": ["string", "null"] },
+    "description": {
+      "description": "티켓 설명. 문자열 또는 구조화 객체(sections, raw_text 포함) 허용",
+      "oneOf": [
+        { "type": "string" },
+        { "type": "object" },
+        { "type": "null" }
+      ]
+    },
     "type": { "type": "string" },
     "status": { "type": "string" },
     "priority": { "type": "string" },

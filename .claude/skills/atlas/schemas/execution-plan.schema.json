@@ -23,6 +23,24 @@
       }
     },
     "total_tasks": { "type": "integer", "minimum": 1 },
+    "file_conflicts": {
+      "type": "array",
+      "description": "같은 Wave 내에서 expected_files가 겹치는 Task 충돌 목록",
+      "items": {
+        "type": "object",
+        "required": ["wave_index", "file", "conflicting_tasks"],
+        "properties": {
+          "wave_index": { "type": "integer", "minimum": 0 },
+          "file": { "type": "string" },
+          "conflicting_tasks": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^TASK-[a-f0-9]{8}$" },
+            "minItems": 2
+          }
+        },
+        "additionalProperties": false
+      }
+    },
     "created_at": { "type": "string", "format": "date-time" }
   },
   "additionalProperties": false

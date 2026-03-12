@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Task Meta",
-  "description": "Task의 메타데이터 정의",
+  "description": "Task의 메타데이터 정의. AC는 Task에 내장, Policy는 ID 참조",
   "type": "object",
   "required": ["task_id", "ticket_key", "type", "priority", "title", "description", "dependencies", "created_at"],
   "properties": {
@@ -30,9 +30,28 @@
       "type": "array",
       "items": { "type": "string" }
     },
-    "linked_ac_ids": {
+    "acceptance_criteria": {
       "type": "array",
-      "items": { "type": "string" }
+      "description": "Subtask 고유 AC. 해당 Task만의 완료 기준",
+      "items": {
+        "type": "object",
+        "required": ["level", "text", "status"],
+        "properties": {
+          "level": { "type": "string", "enum": ["MUST", "SHOULD", "MAY"] },
+          "text": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "verified", "failed"],
+            "description": "analyze=pending, execute→verified/failed"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "policy_refs": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^POL-" },
+      "description": "이 Task가 구현하거나 검증하는 Policy ID 목록"
     },
     "metadata": { "type": "object" },
     "created_at": { "type": "string", "format": "date-time" }

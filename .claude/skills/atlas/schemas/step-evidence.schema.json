@@ -16,6 +16,7 @@
     "validated_at": { "type": "string", "format": "date-time" },
     "outputs": {
       "type": "array",
+      "minItems": 1,
       "items": {
         "type": "object",
         "required": ["file", "schema", "valid"],
