@@ -80,9 +80,113 @@ export RUN_DIR=$(run_dir_path "$RUN_ID")
 | `learn`    | `skills/learn/SKILL.md`       | 프로젝트 컨벤션 분석 → conventions.json 생성 |
 | `analyze`  | `skills/analyze/SKILL.md`     | Jira 티켓 재귀 수집 → L2(하위작업) = Task 1:1 매핑 |
 | `plan`     | `skills/plan/SKILL.md`        | DAG 위상 정렬 → Wave 기반 실행 계획 생성     |
+| `execute`  | `skills/execute/SKILL.md`     | Wave 순회 → 코드 생성 + 빌드 검증 + Task별 커밋 |
 
 옵션(`$1` 이후)은 각 스킬 파일의 지시에 따라 처리한다.
 모든 상대 경로는 이 SKILL.md가 위치한 디렉토리(`${CLAUDE_SKILL_DIR}`) 기준이다.
+
+## 파일 권한 정책 (File Policy) — 강제 적용
+
+파일 수정 권한은 **가드 스크립트(`hooks/guard/check-file-policy.sh`)**가 강제한다. 원칙이 아니라 코드로 제어한다.
+
+### 정책 정의 파일
+
+`hooks/guard/file-policy.json` — 전역 규칙(no_access, readonly)과 스텝별 writable 경로를 선언한다.
+
+### 강제 적용 방법
+
+**모든 Write/Edit 도구 호출 전에** 반드시 가드 스크립트를 실행한다:
+
+```bash
+ATLAS_STEP=${CURRENT_STEP} PROJECT_ROOT=${PROJECT_ROOT} RUN_DIR=${RUN_DIR} \
+  bash hooks/guard/check-file-policy.sh "<대상 파일 경로>" "write"
+```
+
+- **exit 0** → 허용. Write/Edit을 진행한다.
+- **exit 1** → 차단. **Write/Edit을 실행하지 않는다.** stderr의 차단 이유를 사용자에게 출력한다.
+
+### 호출 규칙
+
+1. **Write 도구 호출 전**: `check-file-policy.sh <file_path> write` 실행 → exit 0일 때만 Write
+2. **Edit 도구 호출 전**: `check-file-policy.sh <file_path> edit` 실행 → exit 0일 때만 Edit
+3. **가드를 거치지 않은 Write/Edit은 존재하지 않아야 한다**
+4. 가드가 차단하면 파이프라인을 중단하고 사용자에게 보고한다
+
+### 정책 요약
+
+**전역 (모든 스텝):**
+- `no-access`: `.env`, `.env.*`
+- `readonly`: `schemas/**`, `scripts/**`, `hooks/**`, `skills/*/SKILL.md`, `skills/*/scripts/**`, `references/**`
+
+**스텝별 writable:** `file-policy.json`의 `steps` 섹션 참조.
+
+### 위반 시 행동
+
+- 가드가 exit 1을 반환하면 **해당 Write/Edit을 실행하지 않는다** (가드가 코드 레벨에서 차단).
+- 차단된 시도를 사용자에게 즉시 보고한다 (대상 파일, 이유, 현재 스텝).
+- 스크립트 실행 중 오류가 발생해도 스크립트 자체를 수정하지 않는다 (readonly 가드가 차단).
+
+## 투명성 및 오류 추적 정책
+
+모든 사항은 사용자가 알 수 있어야 한다. 특히 오류는 사용자가 추적할 수 있도록 흔적을 남겨야 한다.
+
+### 원칙
+
+1. **조용한 실패 금지** — 오류를 catch하고 무시하거나, 조용히 우회하지 않는다. 모든 오류는 사용자에게 보고한다.
+2. **오류 기록 필수** — 오류 발생 시 `${RUN_DIR}/errors/` 디렉토리에 로그를 남긴다.
+3. **임의 우회 금지** — 오류를 LLM이 자의적으로 해결하지 않는다. 원인을 분석하여 사용자에게 보고하고 판단을 요청한다.
+4. **상태 변경 투명성** — Task 상태 전이, 파일 생성/수정, 스킵 판단 등 모든 결정을 사용자에게 출력한다.
+5. **스크립트 임의 수정 절대 금지** — Python/Shell 스크립트 실행 중 오류가 발생했을 때, 스크립트 소스 코드를 Edit/Write로 수정하여 재실행하는 것을 **절대 금지**한다. 이는 파일 권한 정책의 readonly 규칙이기도 하지만, 별도로 강조한다.
+
+### 스크립트 오류 시 필수 절차
+
+스크립트(`.py`, `.sh`) 실행이 실패하면 **반드시** 아래 순서를 따른다:
+
+1. **중단** — 파이프라인 진행을 멈춘다
+2. **보고** — 사용자에게 아래 정보를 출력한다:
+   - 실패한 스크립트 경로
+   - exit code
+   - stderr/stdout 출력 (truncate 가능)
+   - 원인 분석 (입력 데이터 문제인지, 스크립트 버그인지, 환경 문제인지)
+3. **제안** — 수정이 필요하면 구체적인 수정 방안을 제안한다
+4. **대기** — 사용자가 수정을 승인하거나 다른 지시를 줄 때까지 **진행하지 않는다**
+
+**금지되는 행동:**
+- 스크립트 코드에 try-except를 추가하여 오류를 삼키기
+- 조건문을 완화하여 검증을 우회하기
+- 기본값을 주입하여 누락된 필드를 채우기
+- "이 부분만 살짝 고치면 된다"는 판단으로 readonly 스크립트를 수정하기
+
+### 오류 로그 형식
+
+오류 발생 시 `${RUN_DIR}/errors/{TASK_ID 또는 step}-{timestamp}.json`을 생성한다:
+
+```json
+{
+  "timestamp": "ISO-8601",
+  "step": "execute",
+  "task_id": "TASK-abc12345",
+  "phase": "validation",
+  "error_type": "build_failure",
+  "command": "cd server && ./gradlew :core:compileJava",
+  "exit_code": 1,
+  "output": "...(truncated)",
+  "action_taken": "사용자에게 보고",
+  "resolved": false
+}
+```
+
+### 사용자 보고 시점
+
+| 이벤트 | 보고 방식 |
+|--------|-----------|
+| 스텝 시작/완료 | 한 줄 상태 메시지 |
+| Task 상태 전이 | `TASK_ID: OLD → NEW` 형식 출력 |
+| 스크립트 실행 오류 | 오류 내용 + exit code + 출력 요약 |
+| 파일 권한 위반 시도 | 대상 파일 + 시도한 작업 + 이유 |
+| 검증 실패 | validation-result.json 내용 요약 |
+| 스킵 판단 | 스킵 이유 (증거 이미 존재, 의존성 FAILED 등) |
+| 재시도 | 재시도 횟수 + 이전 실패 원인 |
 
 ## 실행 규칙
 
@@ -93,7 +197,14 @@ export RUN_DIR=$(run_dir_path "$RUN_ID")
 
 ## 환경 설정
 
-스킬 루트의 `.env`(`${CLAUDE_SKILL_DIR}/.env`)를 직접 읽는다. 파일이 없으면 에러를 출력하고 종료한다.
+스킬 루트의 `.env`(`${CLAUDE_SKILL_DIR}/.env`)에서 환경변수를 로드한다. 파일이 없으면 에러를 출력하고 종료한다.
+
+**필수 규칙:**
+- `.env` 파일은 **절대로 `Read` 도구로 읽지 않는다.** API 토큰 등 민감 정보가 대화 컨텍스트에 노출되기 때문이다.
+- 반드시 `Bash` 도구에서 `source scripts/common.sh && load_env`로 로드한다.
+- **파이프라인 시작 시 가장 먼저** `load_env`를 실행하여 `PROJECT_ROOT`와 `AUTOMATION_PATH`를 확정한다.
+- `runs.json`, 증거 파일, `conventions.json` 등 모든 `.automation/` 하위 파일은 `AUTOMATION_PATH` 기준으로 접근한다.
+- `Glob`이나 `Read`로 경로를 직접 추측하지 않는다. 항상 `source`한 변수값을 사용한다.
 
 ## 산출물 구조
 

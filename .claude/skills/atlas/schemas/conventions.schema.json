@@ -22,6 +22,18 @@
       },
       "additionalProperties": true
     },
+    "commands": {
+      "type": "object",
+      "description": "프로젝트별 빌드/테스트/린트 실행 커맨드. PROJECT_ROOT 기준 상대 경로 포함. learn 단계에서 탐색하여 기록한다.",
+      "properties": {
+        "build": { "type": "string", "description": "빌드 커맨드 (예: cd server && ./gradlew :core:compileJava)" },
+        "test": { "type": "string", "description": "테스트 커맨드 (예: cd server && ./gradlew test)" },
+        "lint": { "type": "string", "description": "린트 커맨드 (예: pnpm lint)" },
+        "typecheck": { "type": "string", "description": "타입 체크 커맨드 (예: pnpm typecheck)" },
+        "format": { "type": "string", "description": "포맷 커맨드 (예: pnpm format)" }
+      },
+      "additionalProperties": { "type": "string" }
+    },
     "naming": {
       "type": "object",
       "description": "네이밍 컨벤션. 키는 대상(entity, service 등), 값은 한 줄 규칙",

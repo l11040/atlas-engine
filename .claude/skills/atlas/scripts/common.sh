@@ -111,6 +111,18 @@ task_artifacts() {
 }
 
 # ── 상태 관련 ──
+# 목적: Task의 현재 status 문자열을 반환한다 (dependency 확인에 반복 사용)
+read_task_status() {
+  local task_id="$1"
+  local status_file
+  status_file="$(task_status "$task_id")"
+  if [ ! -f "$status_file" ]; then
+    echo "UNKNOWN"
+    return 1
+  fi
+  jq -r '.status' "$status_file" 2>/dev/null || echo "UNKNOWN"
+}
+
 update_status() {
   local task_id="$1"
   local new_status="$2"

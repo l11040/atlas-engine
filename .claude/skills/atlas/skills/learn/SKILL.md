@@ -42,6 +42,34 @@ disable-model-invocation: true
 | 타입/컴파일 | `tsconfig*.json`, `vite.config.*`, `next.config.*`, `webpack.config.*` |
 | 테스트 | `jest.config.*`, `vitest.config.*`, `pytest.ini` |
 
+#### 2-1. 실행 커맨드 탐색 (`commands`)
+
+빌드 도구 위치와 모듈 구조를 파악하여 **실제 실행 가능한 커맨드**를 `commands` 필드에 기록한다.
+단순 도구명(`gradle`)이 아니라 PROJECT_ROOT에서 실행 가능한 전체 커맨드를 저장한다.
+
+**탐색 절차:**
+
+1. **빌드 래퍼 위치 확인**: `gradlew`, `mvnw` 등이 PROJECT_ROOT에 있는지, 서브 디렉토리에 있는지 확인
+2. **모듈 구조 파악**: 멀티 모듈이면 주요 모듈 타겟을 식별 (예: `:core:compileJava`)
+3. **package.json scripts 확인**: `build`, `test`, `lint`, `typecheck`, `format` 스크립트 존재 여부
+4. **Makefile 확인**: `make build`, `make test` 등 타겟 존재 여부
+
+**저장 예시:**
+
+```json
+{
+  "commands": {
+    "build": "cd server && ./gradlew :core:compileJava :fo:compileJava",
+    "test": "cd server && ./gradlew test",
+    "lint": null
+  }
+}
+```
+
+- 커맨드가 없는 항목은 `null`이 아닌 **필드 자체를 생략**한다.
+- 모든 커맨드는 `PROJECT_ROOT`에서 실행된다고 가정한다.
+- `cd` 가 필요하면 커맨드에 포함한다 (예: `cd server && ./gradlew build`).
+
 ### 3. Layer 2 — 외부 컨벤션 스킬 감지
 
 스택을 감지하여 베스트 프랙티스를 적용한다. 감지 결과를 `convention_skills_applied`에 기록한다.
