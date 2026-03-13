@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RedTeam",
+  "description": "레이어별 레드팀 검토 기록",
+  "type": "object",
+  "required": ["type", "target", "layer", "checks", "timestamp"],
+  "properties": {
+    "type": { "type": "string", "const": "redteam" },
+    "target": { "type": "string", "description": "검토 대상 증거 파일명" },
+    "layer": {
+      "type": "string",
+      "enum": ["domain", "schema", "repository", "service", "batch"],
+      "description": "검토 레이어"
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["item", "result"],
+        "properties": {
+          "item": { "type": "string" },
+          "result": { "type": "string", "enum": ["pass", "fail"] },
+          "detail": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "fixes_applied": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "수정한 내역"
+    },
+    "timestamp": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": true
+}

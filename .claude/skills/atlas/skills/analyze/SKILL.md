@@ -1,57 +1,33 @@
 ---
 name: analyze
 description: >
-  Jira 티켓을 재귀 수집하고 L2(하위 작업)를 Task로 1:1 매핑한다. AC는 Task에 내장하고,
-  Policy는 policy-registry.json으로 추적한다. 티켓 분해, Task 스캐폴딩, 의존성 그래프 생성이 필요할 때 사용.
-disable-model-invocation: true
+  Jira 티켓을 재귀 수집하고 LLM이 Task로 분해한다. 레드팀 검증 후 tasks/ 개별 파일로 기록.
 ---
 
-# analyze — Jira 티켓 → Task 분해
+# /analyze — Jira 티켓 → Task 분해
 
-Jira 티켓을 재귀 수집하고, L2(하위 작업)를 Task로 1:1 매핑하여 run 디렉토리에 저장한다.
+## 목적
+
+Jira 티켓을 수집하고, LLM이 직접 Task로 분해하여 `tasks/` 디렉토리에 개별 파일로 기록한다.
 
 ## 옵션
 
 - `$1` (필수) — Jira 티켓 키 (예: `GRID-2`)
 - `--force` → 새 run을 생성하여 재분석
 
-## 스크립트
-
-- **`scripts/fetch-ticket.py`** — Jira API로 티켓 + 하위 티켓을 재귀 수집 → source.json
-- **`scripts/decompose-tasks.py`** — source.json → skeleton 출력 / Task 디렉토리 스캐폴딩
-
-## AC와 Policy의 소유 범위
-
-| 항목 | 소유 범위 | 저장 위치 |
-|------|-----------|-----------|
-| AC | Subtask(L2) 고유 | `task.json.acceptance_criteria` |
-| Policy | Story(L1) 공유 | `policy-registry.json` |
-
-- AC는 각 Subtask의 description에서 추출하여 task.json에 직접 내장한다
-- Policy는 Story에서 수집하여 policy-registry.json에 저장, Task는 policy_refs로 참조한다
-
 ## 실행 흐름
 
-### 0. 사전 확인
+### 1. Run 결정
 
-```bash
-bash hooks/pre-step/pre-analyze.sh
-```
+- `RUN_DIR`이 이미 설정되어 있으면 사용 (전체 파이프라인에서 전달)
+- 없으면 `resolve_run()` / `create_run()`으로 결정
 
-티켓 키 인자가 없으면 에러를 출력하고 종료한다.
+### 2. 기존 분석 확인
 
-### 1. Run 디렉토리 결정
+`${RUN_DIR}/evidence/analyze/done.json`이 존재하고 `status=done`이면:
+- 기존 tasks/ 요약을 출력하고 **즉시 종료**
 
-- `--force` 또는 활성 run이 없으면: `common.sh`의 `create_run()`으로 새 run 생성
-- 기존 run이 있고 `--force`가 없으면: `resolve_run()`으로 기존 run 이어서 진행
-- `RUN_DIR` 환경변수를 설정한다
-
-### 2. 기존 분석 결과 확인
-
-`${RUN_DIR}/dependency-graph.json`이 이미 존재하고 `--force`가 없으면:
-- 기존 분석 결과 요약을 출력하고 **즉시 종료**한다.
-
-### 3. Jira 티켓 수집
+### 3. Jira 티켓 수집 (Setup)
 
 ```bash
 python3 skills/analyze/scripts/fetch-ticket.py ${TICKET_KEY} \
@@ -61,77 +37,120 @@ python3 skills/analyze/scripts/fetch-ticket.py ${TICKET_KEY} \
 
 결과: `${RUN_DIR}/source.json`
 
-### 4. Skeleton 추출 — LLM 분석용 입력 생성
+**증거 기록 (필수):**
 
-```bash
-python3 skills/analyze/scripts/decompose-tasks.py \
-  --ticket-key ${TICKET_KEY} \
-  --run-dir ${RUN_DIR} \
-  --scaffold-only
+성공 시 → `${RUN_DIR}/evidence/analyze/fetch-ticket.json`:
+```json
+{
+  "type": "script",
+  "script": "fetch-ticket.py",
+  "exit_code": 0,
+  "output_summary": "L0: GRID-2, L1: 2 Stories, L2: 5 Subtasks",
+  "artifacts": ["source.json"],
+  "timestamp": "ISO-8601"
+}
 ```
 
-stdout으로 L2 하위 작업 skeleton이 출력된다.
+실패 시 → `${RUN_DIR}/evidence/analyze/fetch-ticket.error.json`:
+```json
+{
+  "type": "script_error",
+  "script": "fetch-ticket.py",
+  "exit_code": 2,
+  "stderr": "...",
+  "diagnosis": "원인 분석",
+  "timestamp": "ISO-8601"
+}
+```
+실패 시 사용자에게 보고하고 파이프라인을 중단한다.
 
-### 5. Task Plan 작성 — LLM이 수행
+### 4. Task 분해 (LLM 자유 실행)
 
-skeleton과 `PROJECT_ROOT/.automation/conventions.json`을 참조하여 **task-plan.json**을 작성한다.
+source.json을 읽고 **LLM이 직접** Task를 분해한다:
 
-task-plan.json의 각 Task에는:
-- `acceptance_criteria`: Subtask의 AC를 `{level, text, status:"pending"}` 배열로 내장
-- `policy_refs`: impl은 `Policy Rules` 섹션의 `POL-*` ID, test는 `Tested Policies` 섹션의 `POL-*` ID
+1. **source.json 분석** — 티켓 계층, AC, 엔티티, 정책을 파악한다
+2. **Task 목록 작성** — 각 L2 subtask를 기반으로 Task를 정의한다
+3. **의존성 결정** — Task 간 의존 관계를 파악한다 (엔티티 → 레포지토리 → 서비스 등)
+4. **개별 Task 파일 저장** — `${RUN_DIR}/tasks/` 디렉토리에 기록
 
-필드 결정 규칙 상세는 [references/field-rules.md](references/field-rules.md) 참조.
+**산출물 구조:**
 
-### 6. Policy Registry 생성 — LLM이 수행
-
-Story(L1)의 Policy Rules를 수집하여 `${RUN_DIR}/policy-registry.json`을 작성한다.
-`schemas/policy-registry.schema.json` 구조를 따른다.
-
-추출/매핑 규칙 상세는 [references/policy-registry-rules.md](references/policy-registry-rules.md) 참조.
-
-### 7. Task 디렉토리 스캐폴딩
-
-task-plan.json을 `${RUN_DIR}/task-plan.json`에 Write한 뒤 스크립트에 전달한다.
-
-> 주의: `/tmp/task-plan.json` 등 고정 경로를 사용하면 이전 실행 잔재로 Write 도구가 실패할 수 있다. 반드시 run별 고유 경로를 사용한다.
-
-```bash
-python3 skills/analyze/scripts/decompose-tasks.py \
-  --ticket-key ${TICKET_KEY} \
-  --run-dir ${RUN_DIR} \
-  --task-plan ${RUN_DIR}/task-plan.json
+`${RUN_DIR}/tasks/index.json`:
+```json
+{
+  "ticket_key": "GRID-2",
+  "task_ids": ["1", "2", "3"]
+}
 ```
 
-**산출물 (모두 `${RUN_DIR}/` 하위):**
-- `tickets/{EPIC}/{STORY}/{SUBTASK}/ticket.json` — 계층형 티켓 트리 (L0/L1/L2 각각)
-- `dependency-graph.json` — DAG (Jira key → Task ID 변환)
-- `tasks/TASK-{hex}/meta/task.json` — task-meta 스키마 (AC 내장 + policy_refs)
-- `tasks/TASK-{hex}/state/status.json` — 초기 PENDING
-- `tasks/TASK-{hex}/artifacts/artifacts.json` — 빈 배열
-
-> policy-registry.json은 스텝 6에서 LLM이 직접 생성한다 (스크립트 아님).
-
-### 8. 검증 + 증거 생성
-
-```bash
-RUN_DIR=${RUN_DIR} bash hooks/post-step/post-analyze.sh
+`${RUN_DIR}/tasks/task-1.json`:
+```json
+{
+  "id": "1",
+  "title": "Point 엔티티 생성",
+  "description": "포인트 적립/차감을 위한 JPA 엔티티",
+  "files": ["server/core/src/.../Point.java"],
+  "depends_on": [],
+  "ac": ["MUST: id, memberId, amount, type, createdAt 필드"],
+  "status": "pending",
+  "source_tickets": ["GRID-80"]
+}
 ```
 
-검증 대상: tickets/**/ticket.json (계층형), dependency-graph.json, task.json (전체), **policy-registry.json**
+`schemas/analyze/task.schema.json`, `schemas/analyze/task-index.schema.json` 구조를 따른다.
 
-### 9. 결과 출력
+**증거 기록:** → `${RUN_DIR}/evidence/analyze/decompose.json`:
+```json
+{
+  "type": "llm_decision",
+  "action": "task_decompose",
+  "decisions": [{"task_id": "1", "title": "...", "files": [...]}],
+  "reasoning": "분해 근거",
+  "timestamp": "ISO-8601"
+}
+```
 
-1. 티켓 요약 (key, summary, type, status)
-2. 계층 트리 시각화 (Epic → Story → Subtask/Task 매핑)
-3. Task 목록 (ID, type, title, jira_key, AC 수, policy_refs)
-4. 의존성 그래프 시각화 (텍스트 기반 DAG)
-5. Policy 커버리지 요약 (implemented/tested/gaps)
-6. 스키마 검증 결과
+### 5. 레드팀 검증
 
-## Jira 계층 → Task 매핑
+task 파일들을 source.json 대비 비판적으로 검증한다:
 
-| Jira 레벨 | issuetype | 역할 | Task 생성 |
-|-----------|-----------|------|-----------|
-| L0 | 에픽 | 요구사항 전체 범위 → ticket.json | X |
-| L1 | 스토리 | 기능 단위 그룹핑 → Story 컨텍스트 상속 + Policy 소스 | X |
-| L2 | 하위 작업 | 실제 코드 작업 단위 → **Task 1:1 매핑** (AC 내장) | O |
+**체크리스트:**
+1. **커버리지** — source.json의 모든 L2 subtask가 task 파일에 매핑되었는가?
+2. **의존성 완전성** — depends_on이 실제 의존 관계를 반영하는가? 순환이 없는가?
+3. **파일 경로 실존** — files의 기존 파일 경로가 실제로 존재하는가? 새 파일은 conventions 패턴을 따르는가?
+4. **AC 매핑** — source.json의 AC 항목이 모두 어떤 task에 할당되었는가?
+
+문제 발견 시 해당 task 파일을 직접 수정한다.
+
+**증거 기록:** → `${RUN_DIR}/evidence/analyze/redteam-decompose.json`:
+```json
+{
+  "type": "redteam",
+  "target": "decompose.json",
+  "checks": [
+    {"item": "커버리지", "result": "pass"},
+    {"item": "의존성 완전성", "result": "fail", "detail": "..."}
+  ],
+  "fixes_applied": ["수정 내역"],
+  "timestamp": "ISO-8601"
+}
+```
+
+### 6. 완료 마커
+
+모든 검증 통과 후 → `${RUN_DIR}/evidence/analyze/done.json`:
+```json
+{
+  "type": "step_done",
+  "step": "analyze",
+  "status": "done",
+  "summary": {"tasks_count": 5, "redteam_fixes": 1},
+  "timestamp": "ISO-8601"
+}
+```
+
+### 7. 결과 출력
+
+1. 티켓 계층 요약 (L0 → L1 → L2)
+2. Task 목록 (id, title, files, depends_on)
+3. 레드팀 검증 결과

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TaskIndex",
+  "description": "Task ID 인덱스. tasks/index.json 구조.",
+  "type": "object",
+  "required": ["ticket_key", "task_ids"],
+  "properties": {
+    "ticket_key": { "type": "string", "pattern": "^[A-Z]+-\\d+$" },
+    "task_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Task ID 목록 (의존성 순서)"
+    }
+  },
+  "additionalProperties": false
+}

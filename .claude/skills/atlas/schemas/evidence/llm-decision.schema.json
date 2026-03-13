@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LLMDecision",
+  "description": "LLM의 결정 기록 (task 분해, 코드 생성 등)",
+  "type": "object",
+  "required": ["type", "action", "timestamp"],
+  "properties": {
+    "type": { "type": "string", "const": "llm_decision" },
+    "action": { "type": "string", "description": "task_decompose, code_generate 등" },
+    "task_id": { "type": "string" },
+    "decisions": { "type": "array", "items": { "type": "object" } },
+    "files_created": { "type": "array", "items": { "type": "string" } },
+    "files_modified": { "type": "array", "items": { "type": "string" } },
+    "reasoning": { "type": "string" },
+    "timestamp": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": true
+}

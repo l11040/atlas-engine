@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "StatusChange",
+  "description": "Task status 변경 증거. update_task_status가 자동 생성.",
+  "type": "object",
+  "required": ["type", "task_id", "transition", "timestamp"],
+  "properties": {
+    "type": { "const": "status_change" },
+    "task_id": { "type": "string" },
+    "transition": {
+      "type": "object",
+      "required": ["from", "to"],
+      "properties": {
+        "from": { "type": "string" },
+        "to": { "type": "string" }
+      }
+    },
+    "reason": { "type": "string" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "data": {
+      "description": "추가 증거 데이터 (선택)"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "StepDone",
+  "description": "Step 완료 마커. 매크로 엣지 조건으로 사용.",
+  "type": "object",
+  "required": ["type", "step", "status", "timestamp"],
+  "properties": {
+    "type": { "type": "string", "const": "step_done" },
+    "step": { "type": "string", "enum": ["learn", "analyze", "execute"] },
+    "status": { "type": "string", "enum": ["done", "failed"] },
+    "summary": { "type": "object", "additionalProperties": true },
+    "timestamp": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

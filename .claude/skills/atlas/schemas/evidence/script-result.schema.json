@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ScriptResult",
+  "description": "스크립트 실행 성공 기록",
+  "type": "object",
+  "required": ["type", "script", "exit_code", "timestamp"],
+  "properties": {
+    "type": { "type": "string", "const": "script" },
+    "script": { "type": "string" },
+    "args": { "type": "array", "items": { "type": "string" } },
+    "exit_code": { "type": "integer", "const": 0 },
+    "output_summary": { "type": "string" },
+    "artifacts": { "type": "array", "items": { "type": "string" } },
+    "task_id": { "type": "string" },
+    "gates_passed": { "type": "array", "items": { "type": "string" } },
+    "timestamp": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": true
+}
