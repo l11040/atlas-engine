@@ -33,6 +33,20 @@
       "items": { "type": "string" },
       "description": "이 Task의 근거가 되는 Jira 티켓 키 목록"
     },
+    "overrides": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["convention", "ac_requires", "decision", "reason"],
+        "properties": {
+          "convention": { "type": "string", "description": "conventions.json의 해당 규칙 (예: pk_strategy: Long auto-increment)" },
+          "ac_requires": { "type": "string", "description": "티켓 AC가 요구하는 값 (예: UUID BINARY(16))" },
+          "decision": { "type": "string", "enum": ["ac", "convention"], "description": "어느 쪽을 따를지" },
+          "reason": { "type": "string", "description": "판단 근거 (출처 티켓 포함)" }
+        }
+      },
+      "description": "conventions.json과 티켓 AC가 충돌할 때의 명시적 판단. 충돌 없으면 생략."
+    },
     "updated_at": {
       "type": "string",
       "format": "date-time",

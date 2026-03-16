@@ -93,6 +93,7 @@ bash scripts/validate.sh \
 
 ## 코드 생성 규칙
 
-1. **conventions.json을 최우선** — naming, style, annotations, patterns
-2. **forbidden 위반 금지** — 생성 전 확인
-3. **기존 코드 일관성** — 주변 파일 패턴 따르기
+1. **conventions.json을 기본으로** — naming, style, annotations, patterns
+2. **overrides 우선 적용** — Task에 `overrides`가 있으면 해당 항목은 override의 `decision`을 따른다 (`ac`면 AC 값, `convention`이면 conventions 값)
+3. **forbidden 위반 금지** — 생성 전 확인
+4. **기존 코드 일관성** — 주변 파일 패턴 따르기

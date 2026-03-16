@@ -133,7 +133,21 @@
 - [ ] **BATCH-4** — 스케줄러에 타임존이 명시되어 있는가
   → line_ref: 스케줄 정의 위치
 
-### 7. 미완성 설계 감지
+### 7. Convention Override 검증
+
+Task에 `overrides`가 있을 때 적용한다. overrides가 없으면 전체 스킵.
+
+- [ ] **CONV-1** — override 결정(`decision: "ac"`)이 실제 코드에 반영되었는가
+  → override에서 `ac_requires: "UUID BINARY(16)"`인데 코드가 Long이면 FAIL
+  → line_ref: 해당 필드/설정 위치
+- [ ] **CONV-2** — override 없는 항목이 conventions.json을 따르는가
+  → overrides에 명시되지 않은 conventions 규칙이 코드에서 위반되면 FAIL
+  → line_ref: 위반 코드 위치
+- [ ] **CONV-3** — override 근거의 출처 티켓이 source.json에 실존하는가
+  → override.reason에 언급된 티켓 키가 source.json에 없으면 FAIL
+  → line_ref: N/A (task 파일 참조)
+
+### 8. 미완성 설계 감지
 
 모든 레이어 검토 완료 후, 다음을 추가로 확인한다:
 
