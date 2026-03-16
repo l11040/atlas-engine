@@ -174,9 +174,13 @@ DB 테이블/컬렉션명을 DB 엔진의 예약어 목록과 대조한다.
 | 스택 | 탐색 대상 | 확인 항목 |
 |------|----------|----------|
 | Spring Batch | `@Bean` reader | `@StepScope`, `LocalDateTime.now()` |
+| Spring Batch | Step 빌더 | `faultTolerant()`, `skipLimit()`, `retryLimit()` |
 | Celery | `@task`/`@shared_task` | `bind=True`, `max_retries` |
 | BullMQ | `new Queue()`/`Worker` | `concurrency`, `limiter` |
 | Go worker | `func.*Worker` | context cancellation, graceful shutdown |
+
+**production_rules.batch 추가 규칙:**
+배치 처리 단계에 장애 허용(fault tolerance) 설정 권장 — 단일 아이템 실패가 전체 Job을 중단하지 않도록 스킵/재시도 정책을 명시한다.
 
 #### 4.6. 감사 추적 (audit)
 
@@ -186,6 +190,10 @@ DB 테이블/컬렉션명을 DB 엔진의 예약어 목록과 대조한다.
 |------|----------|----------|
 | 공통 | `*History`, `*Log`, `*Ledger`, `*Entry` | 감사 필드(변경 후 값, 조작자 ID) 존재 |
 | 공통 | 잔액/재고 변경 서비스 | 감사 값 계산 시점 (변경 후여야 함) |
+| ORM 감사 프레임워크 | 기존 모델의 감사 추적 어노테이션/데코레이터 사용 | 모델 정의 → 감사 대상 여부 명시 필수 |
+
+**domain_lint 생성 지시:**
+프로젝트에서 감사 추적 프레임워크를 사용하는 모델이 1개 이상 발견되면, `AUDIT-1` (`require_guard`) 룰을 생성하여 **모든 모델에 감사 대상 여부 선언을 강제**한다. trigger/guard/exclude는 감지된 스택에 맞게 구체화한다.
 
 #### 4.7. 기존 코드에 패턴이 없는 경우
 
@@ -197,6 +205,11 @@ DB 테이블/컬렉션명을 DB 엔진의 예약어 목록과 대조한다.
 | Enum 기반 상태 필드 | state_machines: guard 조건 필수 | `method_guard` 룰 (C-family) |
 | RDBMS 사용 | reserved_words: 예약어 목록 | `forbidden_name` 룰 |
 | 배치/비동기 프레임워크 | batch: 해당 프레임워크 규칙 | 해당 시 `require_guard` 룰 |
+| ORM + 공통 부모 클래스 패턴 | base_entity: 상속 필수 | `require_guard` 룰 (BASE-1) |
+
+**BASE-1 생성 시 주의:**
+프로젝트에서 모든 모델이 공통 부모 클래스를 상속하는 패턴이 발견되면 `require_guard` 룰을 생성하되, **불변/append-only 모델은 예외**로 처리한다. exclude 조건에 이력/원장/이벤트성 모델 패턴을 포함한다.
+`forbidden` 배열에 "공통 부모 클래스 미상속 금지"를 추가할 때도 **"(불변/이력 모델 제외)"**를 반드시 명시한다.
 
 ### 5. CLAUDE.md 참조
 

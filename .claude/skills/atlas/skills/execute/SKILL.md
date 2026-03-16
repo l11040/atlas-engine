@@ -76,10 +76,21 @@ bash scripts/validate.sh \
 
 #### f. 실패 시 재시도
 
-- 최대 3회 재시도 (a~e 반복)
+- 최대 3회 재시도 (a~g 반복)
 - 3회 초과: `update_task_status RUN_DIR TASK_ID "failed" "3회 재시도 실패"` + 사용자 보고
 
-#### g. 성공 시 커밋
+#### g. 레드팀 증거 게이트 (커밋 전 필수)
+
+커밋 전에 `${RUN_DIR}/evidence/execute/task-{id}/redteam-summary.json`의 **존재 여부를 확인**한다.
+
+- **파일 없음 → 커밋 차단**: 레드팀이 실행되지 않은 Task는 커밋할 수 없다
+- **예외 — 테스트 전용 Task**: Task의 files가 `*Test.java`, `*_test.go`, `*.test.ts` 등 **테스트 파일만** 포함하면 레드팀을 스킵할 수 있다. 이 경우 `redteam-summary.json` 대신 `redteam-skip.json`을 기록한다:
+  ```json
+  {"skipped": true, "reason": "test-only task", "timestamp": "ISO-8601"}
+  ```
+- **증거 부족 시**: 사용자에게 보고하고 레드팀(c단계)부터 재실행한다
+
+#### h. 성공 시 커밋
 
 1. `git add` — Task의 files만 스테이징
 2. `git commit` — `feat({scope}): {title}` 형식
