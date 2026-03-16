@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Audit",
+  "description": "카테고리별 컨벤션 감사 결과. conventions.json의 각 카테고리에 대해 의미론적 검증을 수행한 증거.",
+  "type": "object",
+  "required": ["type", "category", "conventions_ref", "checks", "timestamp"],
+  "properties": {
+    "type": { "type": "string", "const": "audit" },
+    "category": {
+      "type": "string",
+      "enum": ["naming", "style", "annotations", "patterns", "forbidden", "required"],
+      "description": "conventions.json의 감사 카테고리"
+    },
+    "conventions_ref": {
+      "type": "string",
+      "description": "참조한 conventions.json 카테고리의 키 (예: naming, style.imports)"
+    },
+    "files_audited": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "감사 대상 파일 목록 (PROJECT_ROOT 기준 상대 경로)"
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "item", "result", "line_ref"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "감사 항목 식별자 (예: NAM-1, STY-1, ANN-1, PAT-1, FBD-1, REQ-1)"
+          },
+          "item": { "type": "string", "description": "검토 항목 설명" },
+          "result": { "type": "string", "enum": ["pass", "fail", "skip"] },
+          "severity": {
+            "type": "string",
+            "enum": ["high", "medium", "low"],
+            "description": "위반 심각도 (fail일 때 필수)"
+          },
+          "line_ref": {
+            "type": "string",
+            "description": "증거 위치. pass: 규칙 준수 코드, fail: 위반 코드, skip: 'N/A'. 형식: FileName.java:42"
+          },
+          "convention_rule": {
+            "type": "string",
+            "description": "위반된 conventions.json 규칙 원문"
+          },
+          "detail": { "type": "string", "description": "상세 설명 또는 수정 지시" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "fixes_applied": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "description"],
+        "properties": {
+          "id": { "type": "string", "description": "수정 대상 체크 ID" },
+          "description": { "type": "string" },
+          "line_ref": { "type": "string", "description": "수정이 적용된 위치" }
+        },
+        "additionalProperties": false
+      },
+      "description": "수정한 내역 (high 위반 수정 시)"
+    },
+    "timestamp": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": true
+}

@@ -1,8 +1,8 @@
 ---
 name: atlas
 description: >
-  Jira 티켓 → 코드 자동 생성. Harness 패턴: setup → LLM 자유 실행 → validate.
-  learn으로 컨벤션 학습, analyze로 Task 분해, execute로 코드 생성 + 검증 + 커밋.
+  Jira 티켓 → 코드 자동 생성. Harness 패턴: setup → LLM 자유 실행 → validate → audit.
+  learn으로 컨벤션 학습, analyze로 Task 분해, execute로 코드 생성 + 검증 + 커밋, audit로 컨벤션 감사.
 user-invocable: true
 argument-hint: "TICKET-KEY|learn [options]"
 ---
@@ -12,7 +12,7 @@ argument-hint: "TICKET-KEY|learn [options]"
 Jira 티켓 → 코드 자동 생성 파이프라인. Harness 패턴을 따른다.
 
 ```
-Harness:  setup → [ LLM 자유 실행 ] → [ LLM 레드팀 ] → validate.sh → teardown
+Harness:  setup → [ LLM 자유 실행 ] → [ LLM 레드팀 ] → validate.sh → audit → teardown
 ```
 
 ## 옵션
@@ -39,6 +39,7 @@ Harness:  setup → [ LLM 자유 실행 ] → [ LLM 레드팀 ] → validate.sh 
 | `learn` | `skills/learn/SKILL.md` | 프로젝트 컨벤션 → conventions.json |
 | `analyze` | `skills/analyze/SKILL.md` | Jira 티켓 → tasks/ (개별 파일) |
 | `execute` | `skills/execute/SKILL.md` | tasks/ → 코드 생성 + 검증 + 커밋 |
+| `audit` | `skills/audit/SKILL.md` | 생성 코드 → conventions.json 기준 의미론적 감사 |
 
 ## 전체 파이프라인
 
@@ -77,9 +78,18 @@ Run 결정:
 - `skills/execute/SKILL.md`를 읽고 실행
 - 각 Task에 대해: 코드 생성 → pre-build → 레드팀(병렬) → 피드백 반영 → validate.sh → 레드팀 증거 게이트 → 커밋
 
-### 5. 결과 출력
+### 5. Audit — 컨벤션 준수 감사
 
-완료/실패 Task 현황, 생성된 커밋 수, 수정된 파일 수를 요약한다.
+- `--force` → 새 run이므로 evidence 없음, 자동으로 실행
+- 위 옵션 없이 `evidence/audit/done.json`이 존재하고 `status=done`이면 스킵
+- 없으면 `skills/audit/SKILL.md`를 읽고 실행
+- execute에서 생성된 **전체 코드**를 conventions.json 기준으로 의미론적 감사
+- 카테고리별 병렬 에이전트: naming, style, annotations, patterns, forbidden, required
+- high 위반 발견 시 수정 + fix 커밋 생성
+
+### 6. 결과 출력
+
+완료/실패 Task 현황, 생성된 커밋 수, 수정된 파일 수, audit 결과를 요약한다.
 
 ## 매크로 엣지 (Step 간 전이)
 
@@ -89,6 +99,7 @@ Run 결정:
 |------|------|
 | learn → analyze | `conventions.json` 존재 |
 | analyze → execute | `evidence/analyze/done.json` 존재 + `status=done` |
+| execute → audit | `evidence/execute/done.json` 존재 + `status=done` |
 | 실패 시 | `.error.json` 기록 + 사용자 보고 + 파이프라인 중단 |
 
 ## 환경 설정
@@ -114,6 +125,7 @@ PROJECT_ROOT/.automation/
 ├── conventions.json                     ← learn 산출물
 ├── runs.json                            ← run 레지스트리
 └── runs/{TICKET_KEY}-{YYYYMMDD-HHMMSS}/
+    ├── meta.json                        ← run 메타 (atlas_version, ticket_key, created_at)
     ├── source.json                      ← fetch-ticket.py 출력
     ├── tasks/                           ← Task 개별 파일 디렉토리
     │   ├── index.json                   ← {"task_ids":["1","2",...]}
@@ -123,16 +135,21 @@ PROJECT_ROOT/.automation/
     └── evidence/                        ← 원자화된 증거
         ├── learn/   (done.json)
         ├── analyze/ (fetch-ticket.json, decompose.json, redteam-decompose.json, done.json)
-        └── execute/
-            ├── done.json
-            └── task-{id}/              ← Task별 증거 폴더
-                ├── generate.json
-                ├── redteam-{layer}.json
-                ├── redteam-summary.json
-                ├── validate.json
-                ├── validate.error.json
-                ├── status-{status}.json
-                └── commit.json
+        ├── execute/
+        │   ├── done.json
+        │   └── task-{id}/              ← Task별 증거 폴더
+        │       ├── generate.json
+        │       ├── redteam-{layer}.json
+        │       ├── redteam-summary.json
+        │       ├── validate.json
+        │       ├── validate.error.json
+        │       ├── status-{status}.json
+        │       └── commit.json
+        └── audit/                       ← 컨벤션 감사 증거
+            ├── audit-{category}.json    ← 카테고리별 감사 결과
+            ├── audit-summary.json       ← 전체 요약
+            ├── audit-fix.json           ← 수정 내역 (있을 때만)
+            └── done.json
 ```
 
 ## Task 완료 처리 (필수)
@@ -164,6 +181,9 @@ update_task_status "$RUN_DIR" "3" "failed" "3회 재시도 실패" "$ERROR_DATA"
 - `record_generate_evidence RUN_DIR TASK_ID FILES_CREATED FILES_MODIFIED` — 코드 생성 결정 증거
 - `record_redteam_evidence RUN_DIR TASK_ID LAYER CHECKS_JSON [FIXES_JSON]` — 레이어별 레드팀 검증 증거
 - `record_redteam_summary RUN_DIR TASK_ID LAYERS_JSON TOTAL_FIXES` — 레드팀 요약 증거
+- `record_audit_evidence RUN_DIR CATEGORY CHECKS_JSON [FIXES_JSON]` — 카테고리별 컨벤션 감사 증거
+- `record_audit_summary RUN_DIR CATEGORIES_JSON TOTAL_VIOLATIONS_JSON TOTAL_FIXES [FIX_COMMIT]` — 감사 요약 증거
+- `record_audit_fix_evidence RUN_DIR FIXES_JSON [COMMIT_HASH] [FILES_MODIFIED]` — 감사 수정 통합 증거
 - `record_skip_evidence RUN_DIR STEP REASON` — Step 스킵 증거 (learn 등)
 - `record_commit_evidence RUN_DIR TASK_ID HASH MSG FILES` — commit evidence만 단독 기록
 - `update_task_status RUN_DIR TASK_ID STATUS REASON` — status 변경만 (실패 처리용)
@@ -179,7 +199,7 @@ update_task_status "$RUN_DIR" "3" "failed" "3회 재시도 실패" "$ERROR_DATA"
 - `schemas/learn/conventions.schema.json` — conventions.json 구조
 - `schemas/analyze/task.schema.json` — 개별 task 파일 구조
 - `schemas/analyze/task-index.schema.json` — tasks/index.json 구조
-- `schemas/evidence/*.schema.json` — 증거 파일 구조 (status-change, commit, redteam, redteam-summary 등)
+- `schemas/evidence/*.schema.json` — 증거 파일 구조 (status-change, commit, redteam, redteam-summary, audit, audit-summary 등)
 
 ## 참조 문서
 

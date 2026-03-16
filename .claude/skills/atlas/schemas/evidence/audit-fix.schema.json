@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AuditFix",
+  "description": "audit 단계에서 수정한 내역 통합 기록",
+  "type": "object",
+  "required": ["type", "fixes", "files_modified", "timestamp"],
+  "properties": {
+    "type": { "type": "string", "const": "audit_fix" },
+    "fixes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "category", "description"],
+        "properties": {
+          "id": { "type": "string", "description": "수정 대상 감사 항목 ID (예: NAM-1, STY-2)" },
+          "category": {
+            "type": "string",
+            "enum": ["naming", "style", "annotations", "patterns", "forbidden", "required"],
+            "description": "감사 카테고리"
+          },
+          "description": { "type": "string", "description": "수정 내용" },
+          "line_ref": { "type": "string", "description": "수정이 적용된 위치" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "files_modified": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "수정된 파일 목록"
+    },
+    "commit_hash": {
+      "type": "string",
+      "description": "수정 커밋 해시"
+    },
+    "timestamp": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": true
+}

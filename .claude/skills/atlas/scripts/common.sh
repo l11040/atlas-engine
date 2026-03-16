@@ -12,6 +12,7 @@ else
   SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 fi
 ATLAS_ROOT="${SCRIPT_DIR}/.."
+ATLAS_VERSION="v0.3.7"
 
 # ── 경로 초기화 ──
 _init_paths() {
@@ -36,6 +37,7 @@ load_env() {
 }
 
 # ── Run 관리 ──
+# 주의: active_runs 값은 객체 { run_id, atlas_version } 또는 하위호환용 문자열일 수 있다
 resolve_run() {
   local ticket_key="$1"
   local runs_file="${AUTOMATION_PATH}/runs.json"
@@ -43,7 +45,11 @@ resolve_run() {
     echo ""
     return
   fi
-  jq -r --arg k "$ticket_key" '.active_runs[$k] // ""' "$runs_file" 2>/dev/null
+  jq -r --arg k "$ticket_key" '
+    .active_runs[$k] //""
+    | if type == "object" then .run_id else . end
+    | if . == null then "" else . end
+  ' "$runs_file" 2>/dev/null
 }
 
 create_run() {
@@ -59,12 +65,29 @@ create_run() {
   mkdir -p "${run_dir}/evidence/learn"
   mkdir -p "${run_dir}/evidence/analyze"
   mkdir -p "${run_dir}/evidence/execute"
+  mkdir -p "${run_dir}/evidence/audit"
+
+  # 목적: run 메타데이터를 기록한다 (atlas 버전, 티켓, 생성 시각)
+  local created_at
+  created_at=$(now_iso)
+  jq -n \
+    --arg atlas_version "$ATLAS_VERSION" \
+    --arg ticket_key "$ticket_key" \
+    --arg run_id "$run_id" \
+    --arg created_at "$created_at" \
+    '{
+      atlas_version: $atlas_version,
+      ticket_key: $ticket_key,
+      run_id: $run_id,
+      created_at: $created_at
+    }' > "${run_dir}/meta.json"
 
   if [ ! -f "$runs_file" ]; then
     echo '{"active_runs":{}}' > "$runs_file"
   fi
   local tmp="${runs_file}.tmp"
-  jq --arg k "$ticket_key" --arg v "$run_id" '.active_runs[$k] = $v' "$runs_file" > "$tmp" && mv "$tmp" "$runs_file"
+  jq --arg k "$ticket_key" --arg v "$run_id" --arg ver "$ATLAS_VERSION" \
+    '.active_runs[$k] = { run_id: $v, atlas_version: $ver }' "$runs_file" > "$tmp" && mv "$tmp" "$runs_file"
 
   echo "$run_id"
 }
@@ -77,7 +100,11 @@ archive_run() {
     return
   fi
   local old_run_id
-  old_run_id=$(jq -r --arg k "$ticket_key" '.active_runs[$k] // ""' "$runs_file" 2>/dev/null)
+  old_run_id=$(jq -r --arg k "$ticket_key" '
+    .active_runs[$k] // ""
+    | if type == "object" then .run_id else . end
+    | if . == null then "" else . end
+  ' "$runs_file" 2>/dev/null)
   if [ -z "$old_run_id" ]; then
     return
   fi
@@ -400,6 +427,91 @@ complete_task() {
 
   update_task_status "$run_dir" "$task_id" "done" "validate 통과 + 커밋 완료 (${commit_hash})"
   record_commit_evidence "$run_dir" "$task_id" "$commit_hash" "$commit_message" "$files"
+}
+
+# ── Audit 증거 기록 ──
+
+# 목적: 카테고리별 감사 결과를 증거로 기록한다
+# 사용: record_audit_evidence RUN_DIR CATEGORY CHECKS_JSON [FIXES_JSON]
+#   CATEGORY:    "naming" | "style" | "annotations" | "patterns" | "forbidden" | "required"
+#   CHECKS_JSON: '[{"id":"NAM-1","item":"파일명 규칙","result":"pass","line_ref":"Grant.java:1"},...]'
+#   FIXES_JSON:  '[{"id":"NAM-1","description":"수정 내용"}]' (선택)
+record_audit_evidence() {
+  local run_dir="$1" category="$2" checks_json="$3" fixes_json="${4:-[]}"
+  local ts
+  ts=$(now_iso)
+  mkdir -p "${run_dir}/evidence/audit"
+  local evidence_file="${run_dir}/evidence/audit/audit-${category}.json"
+
+  jq -n \
+    --arg type "audit" \
+    --arg category "$category" \
+    --arg conventions_ref "$category" \
+    --argjson checks "$checks_json" \
+    --argjson fixes "$fixes_json" \
+    --arg ts "$ts" \
+    '{
+      type: $type,
+      category: $category,
+      conventions_ref: $conventions_ref,
+      checks: $checks,
+      fixes_applied: $fixes,
+      timestamp: $ts
+    }' > "$evidence_file"
+}
+
+# 목적: 전체 카테고리 감사 결과를 요약 증거로 기록한다
+# 사용: record_audit_summary RUN_DIR CATEGORIES_JSON TOTAL_VIOLATIONS_JSON TOTAL_FIXES [FIX_COMMIT]
+#   CATEGORIES_JSON:        '[{"category":"naming","pass":3,"fail":0},...]'
+#   TOTAL_VIOLATIONS_JSON:  '{"high":0,"medium":2,"low":1}'
+record_audit_summary() {
+  local run_dir="$1" categories_json="$2" total_violations_json="$3" total_fixes="${4:-0}" fix_commit="${5:-}"
+  local ts
+  ts=$(now_iso)
+  mkdir -p "${run_dir}/evidence/audit"
+  local evidence_file="${run_dir}/evidence/audit/audit-summary.json"
+
+  jq -n \
+    --arg type "audit_summary" \
+    --argjson categories "$categories_json" \
+    --argjson total_violations "$total_violations_json" \
+    --argjson total_fixes "$total_fixes" \
+    --arg fix_commit "$fix_commit" \
+    --arg ts "$ts" \
+    '{
+      type: $type,
+      categories: $categories,
+      total_violations: $total_violations,
+      total_fixes: $total_fixes,
+      timestamp: $ts
+    } + (if $fix_commit != "" then { fix_commit: $fix_commit } else {} end)' > "$evidence_file"
+}
+
+# 목적: audit 수정 내역을 통합 증거로 기록한다
+# 사용: record_audit_fix_evidence RUN_DIR FIXES_JSON COMMIT_HASH FILES_MODIFIED
+#   FIXES_JSON: '[{"id":"NAM-1","category":"naming","description":"수정 내용","line_ref":"Grant.java:1"},...]'
+record_audit_fix_evidence() {
+  local run_dir="$1" fixes_json="$2" commit_hash="${3:-}" files_modified="${4:-}"
+  local ts
+  ts=$(now_iso)
+  mkdir -p "${run_dir}/evidence/audit"
+  local evidence_file="${run_dir}/evidence/audit/audit-fix.json"
+
+  local files_json
+  files_json=$(echo "$files_modified" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -s . 2>/dev/null || echo '[]')
+
+  jq -n \
+    --arg type "audit_fix" \
+    --argjson fixes "$fixes_json" \
+    --arg commit_hash "$commit_hash" \
+    --argjson files_modified "$files_json" \
+    --arg ts "$ts" \
+    '{
+      type: $type,
+      fixes: $fixes,
+      files_modified: $files_modified,
+      timestamp: $ts
+    } + (if $commit_hash != "" then { commit_hash: $commit_hash } else {} end)' > "$evidence_file"
 }
 
 # 목적: tasks/index.json에서 전체 task ID 목록을 읽는다
