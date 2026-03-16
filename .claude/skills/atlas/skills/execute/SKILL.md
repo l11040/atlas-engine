@@ -1,7 +1,7 @@
 ---
 name: execute
 description: >
-  tasks/ 개별 파일의 Task를 순회하며 코드 생성, 레이어별 병렬 BE 레드팀, validate.sh 실행, Task별 커밋. 모든 증거는 헬퍼 함수로 자동 기록.
+  tasks/ 개별 파일의 Task를 순회하며 코드 생성, 레이어별 병렬 레드팀, validate.sh 실행, Task별 커밋. 모든 증거는 헬퍼 함수로 자동 기록.
 ---
 
 # /execute — 코드 생성 + 검증 + 커밋
@@ -38,9 +38,10 @@ bash scripts/validate.sh \
   --task-id TASK_ID --run-dir "${RUN_DIR}"
 ```
 
-#### c. BE 레드팀 (레이어별 병렬)
+#### c. 레드팀 (레이어별 병렬)
 
 빌드 통과 후, **Agent tool로 레이어별 서브에이전트를 병렬 실행**한다.
+레이어 구성은 프로젝트 스택에 따라 결정한다 (conventions.json의 production_rules 카테고리 참조).
 체크리스트는 [references/be-redteam-checklist.md](references/be-redteam-checklist.md)를 읽고 따른다.
 
 **실행 규칙:**
@@ -64,10 +65,14 @@ bash scripts/validate.sh \
   --scope "파일목록" \
   --conventions "${PROJECT_ROOT}/.automation/conventions.json" \
   --project-root "${PROJECT_ROOT}" \
+  --domain-lint \
+  --source-dir "${PROJECT_ROOT}/소스디렉토리" \
   --task-id TASK_ID --run-dir "${RUN_DIR}"
 ```
 
-증거는 validate.sh가 자동 기록한다 (성공/실패 모두).
+- `--domain-lint`: conventions.json의 `domain_lint` 배열에 정의된 선언적 룰을 기계적으로 실행
+- `--source-dir`: 도메인 린트 탐색 대상 디렉토리 (프로젝트 소스 루트)
+- 증거는 validate.sh가 자동 기록한다 (성공/실패 모두)
 
 #### f. 실패 시 재시도
 

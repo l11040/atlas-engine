@@ -109,9 +109,16 @@ PROJECT_ROOT/.automation/
     └── evidence/                        ← 원자화된 증거
         ├── learn/   (done.json)
         ├── analyze/ (fetch-ticket.json, decompose.json, redteam-decompose.json, done.json)
-        └── execute/ (task-{id}-generate.json, task-{id}-redteam-{layer}.json,
-                      task-{id}-redteam-summary.json, task-{id}-validate.json,
-                      task-{id}-status-*.json, task-{id}-commit.json, done.json)
+        └── execute/
+            ├── done.json
+            └── task-{id}/              ← Task별 증거 폴더
+                ├── generate.json
+                ├── redteam-{layer}.json
+                ├── redteam-summary.json
+                ├── validate.json
+                ├── validate.error.json
+                ├── status-{status}.json
+                └── commit.json
 ```
 
 ## Task 완료 처리 (필수)

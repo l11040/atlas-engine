@@ -496,13 +496,15 @@ PROJECT_ROOT/.automation/
         │   ├── redteam-decompose.json        ← 레드팀 검토 결과
         │   └── done.json                     ← Step 완료 마커
         └── execute/
-            ├── task-{id}-generate.json       ← 코드 생성 결정
-            ├── task-{id}-redteam.json        ← 레드팀 검토
-            ├── task-{id}-validate.json       ← validate.sh 결과
-            ├── task-{id}-validate.error.json ← (실패 시) 오류 기록
-            ├── task-{id}-retry-{n}-*.json    ← 재시도 기록
-            ├── task-{id}-commit.json         ← 커밋 정보
-            └── done.json                     ← Step 완료 마커
+            ├── done.json                     ← Step 완료 마커
+            └── task-{id}/                    ← Task별 증거 폴더
+                ├── generate.json             ← 코드 생성 결정
+                ├── redteam-{layer}.json      ← 레드팀 검토
+                ├── redteam-summary.json      ← 레드팀 요약
+                ├── validate.json             ← validate.sh 결과
+                ├── validate.error.json       ← (실패 시) 오류 기록
+                ├── status-{status}.json      ← 상태 변경 기록
+                └── commit.json               ← 커밋 정보
 ```
 
 ### 7.1 증거 파일 유형
@@ -614,8 +616,7 @@ evidence/{step}/
   {대상}.json                    ← 성공 기록
   {대상}.error.json              ← 오류 기록 (항상 생성)
   redteam-{검토대상}.json        ← 레드팀 검토
-  task-{id}-{행위}.json          ← Task별 기록
-  task-{id}-retry-{n}-{행위}.json ← 재시도 기록
+  task-{id}/{행위}.json           ← Task별 기록 (폴더로 그룹화)
   done.json                      ← Step 완료 마커 (고정명)
 ```
 
@@ -627,10 +628,8 @@ evidence/{step}/
 |------|-----------|-----------|
 | 스크립트 성공 | `{script}.json` | 필수 |
 | 스크립트 실패 | `{script}.error.json` | **필수** |
-| validate.sh 성공 | `task-{id}-validate.json` | 필수 |
-| validate.sh 실패 | `task-{id}-validate.error.json` | **필수** |
-| 재시도 후 성공 | `task-{id}-retry-{n}-validate.json` | 필수 |
-| 재시도 후 실패 | `task-{id}-retry-{n}-validate.error.json` | **필수** |
+| validate.sh 성공 | `task-{id}/validate.json` | 필수 |
+| validate.sh 실패 | `task-{id}/validate.error.json` | **필수** |
 
 **오류 기록 필수 필드:**
 - `exit_code` — 프로세스 종료 코드
@@ -768,7 +767,7 @@ LLM이 추가 필드를 자유롭게 넣는 것은 허용 (additionalProperties:
 
 **결정:** 실패 시 최대 3회 재시도. 재시도마다 에러 피드백을 받아 수정. 최대 횟수 초과 시:
 - task status를 `"pending"`으로 유지 (done이 아님)
-- `evidence/execute/task-{id}-retry-{n}-validate.error.json`에 최종 실패 기록
+- `evidence/execute/task-{id}/validate.error.json`에 최종 실패 기록
 - done.json의 summary에 `failed_tasks` 목록으로 기록
 - 사용자에게 어떤 task가 실패했고 왜인지 명시적으로 보고
 

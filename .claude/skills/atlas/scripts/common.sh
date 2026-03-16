@@ -194,7 +194,8 @@ update_task_status() {
   jq --arg s "$new_status" --arg t "$ts" '.status = $s | .updated_at = $t' "$task_file" > "$tmp" && mv "$tmp" "$task_file"
 
   # 목적: 증거 자동 기록 — status 변경마다 trace를 남긴다
-  local evidence_file="${run_dir}/evidence/execute/task-${task_id}-status-${new_status}.json"
+  mkdir -p "${run_dir}/evidence/execute/task-${task_id}"
+  local evidence_file="${run_dir}/evidence/execute/task-${task_id}/status-${new_status}.json"
   local evidence_json
   evidence_json=$(jq -n \
     --arg type "status_change" \
@@ -224,7 +225,8 @@ record_generate_evidence() {
   local run_dir="$1" task_id="$2" files_created="${3:-}" files_modified="${4:-}"
   local ts
   ts=$(now_iso)
-  local evidence_file="${run_dir}/evidence/execute/task-${task_id}-generate.json"
+  mkdir -p "${run_dir}/evidence/execute/task-${task_id}"
+  local evidence_file="${run_dir}/evidence/execute/task-${task_id}/generate.json"
 
   local created_json modified_json
   created_json=$(echo "$files_created" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -s . 2>/dev/null || echo '[]')
@@ -256,11 +258,12 @@ record_redteam_evidence() {
   local run_dir="$1" task_id="$2" layer="$3" checks_json="$4" fixes_json="${5:-[]}"
   local ts
   ts=$(now_iso)
-  local evidence_file="${run_dir}/evidence/execute/task-${task_id}-redteam-${layer}.json"
+  mkdir -p "${run_dir}/evidence/execute/task-${task_id}"
+  local evidence_file="${run_dir}/evidence/execute/task-${task_id}/redteam-${layer}.json"
 
   jq -n \
     --arg type "redteam" \
-    --arg target "task-${task_id}-generate.json" \
+    --arg target "task-${task_id}/generate.json" \
     --arg layer "$layer" \
     --argjson checks "$checks_json" \
     --argjson fixes "$fixes_json" \
@@ -282,7 +285,8 @@ record_redteam_summary() {
   local run_dir="$1" task_id="$2" layers_json="$3" total_fixes="${4:-0}"
   local ts
   ts=$(now_iso)
-  local evidence_file="${run_dir}/evidence/execute/task-${task_id}-redteam-summary.json"
+  mkdir -p "${run_dir}/evidence/execute/task-${task_id}"
+  local evidence_file="${run_dir}/evidence/execute/task-${task_id}/redteam-summary.json"
 
   jq -n \
     --arg type "redteam_summary" \
@@ -359,7 +363,8 @@ record_commit_evidence() {
   local run_dir="$1" task_id="$2" commit_hash="$3" commit_message="${4:-}" files="${5:-}"
   local ts
   ts=$(now_iso)
-  local evidence_file="${run_dir}/evidence/execute/task-${task_id}-commit.json"
+  mkdir -p "${run_dir}/evidence/execute/task-${task_id}"
+  local evidence_file="${run_dir}/evidence/execute/task-${task_id}/commit.json"
 
   # 목적: files 문자열을 JSON 배열로 변환한다
   local files_json
