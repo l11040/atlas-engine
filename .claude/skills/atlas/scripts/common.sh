@@ -12,7 +12,7 @@ else
   SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 fi
 ATLAS_ROOT="${SCRIPT_DIR}/.."
-ATLAS_VERSION="v0.3.7"
+ATLAS_VERSION="v0.4.0"
 
 # ── 경로 초기화 ──
 _init_paths() {
@@ -242,6 +242,37 @@ update_task_status() {
   echo "$evidence_json" > "$evidence_file"
 
   log_info "Task ${task_id}: ${old_status} → ${new_status} (${reason})"
+}
+
+# ── Failure History 기록 ──
+
+# 목적: Task의 failure_history에 실패 기록을 누적한다
+# 사용: record_failure_history RUN_DIR TASK_ID ATTEMPT TAXONOMY EVIDENCE_PATH
+record_failure_history() {
+  local run_dir="$1" task_id="$2" attempt="$3" taxonomy="$4" evidence_path="$5"
+  local task_file="${run_dir}/tasks/task-${task_id}.json"
+
+  if [ ! -f "$task_file" ]; then
+    log_warn "record_failure_history: task file not found: ${task_file}"
+    return
+  fi
+
+  local ts
+  ts=$(now_iso)
+  local tmp="${task_file}.tmp"
+  jq \
+    --argjson attempt "$attempt" \
+    --arg taxonomy "$taxonomy" \
+    --arg evidence_path "$evidence_path" \
+    --arg ts "$ts" \
+    '.failure_history = (.failure_history // []) + [{
+      attempt: $attempt,
+      taxonomy: $taxonomy,
+      evidence_path: $evidence_path,
+      timestamp: $ts
+    }]' "$task_file" > "$tmp" && mv "$tmp" "$task_file"
+
+  log_info "Task ${task_id}: failure_history += attempt=${attempt} taxonomy=${taxonomy}"
 }
 
 # ── Execute 중간 증거 기록 ──

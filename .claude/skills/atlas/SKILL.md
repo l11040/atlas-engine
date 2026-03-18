@@ -7,13 +7,31 @@ user-invocable: true
 argument-hint: "TICKET-KEY|learn [options]"
 ---
 
-# Atlas v3
+# Atlas v4
 
-Jira 티켓 → 코드 자동 생성 파이프라인. Harness 패턴을 따른다.
+Jira 티켓 → 코드 자동 생성 파이프라인. Harness 패턴 + Claude Code Hooks 기반 RALP 루프.
 
 ```
 Harness:  setup → [ LLM 자유 실행 ] → [ LLM 레드팀 ] → validate.sh → audit → teardown
+                   ↑ PreToolUse       ↑ PostToolUse      ↑ Stop
+                   scope-guard        auto-lint           completion-gate
+                   (우회 불가)        (자동 피드백)       (증거 게이트)
 ```
+
+## Claude Code Hooks (자동 작동)
+
+파이프라인 실행 중 아래 hooks가 **자동으로** 작동한다. SKILL.md에서 별도 호출하지 않는다.
+
+| Hook | 이벤트 | 역할 |
+|------|--------|------|
+| `scope-guard.sh` | PreToolUse(Write\|Edit) | forbidden path 물리적 차단 |
+| `post-edit-lint.sh` | PostToolUse(Write\|Edit) | 편집 후 자동 빌드 체크, 에러 피드백 |
+| `evidence-collector.sh` | PostToolUse(Bash) | validate.sh 결과 자동 수집 (fallback) |
+| `completion-gate.sh` | Stop | validate 증거 없으면 응답 종료 차단 (RALP 강제) |
+| `session-init.sh` | SessionStart | ATLAS_* 환경변수 초기화 |
+
+**RALP 루프**: completion-gate가 validate.sh PASS 증거 없이는 응답 종료를 차단한다.
+LLM이 "완료"를 선언해도 증거가 없으면 물리적으로 끝나지 않는다.
 
 ## 옵션
 
@@ -45,7 +63,7 @@ Harness:  setup → [ LLM 자유 실행 ] → [ LLM 레드팀 ] → validate.sh 
 
 티켓 키 입력 시 아래 순서로 실행한다:
 
-### 1. Setup — 환경 로드 + Run 생성
+### 1. Setup — 환경 로드 + Run 생성 + Hooks 활성화
 
 ```bash
 source scripts/common.sh && load_env
@@ -55,6 +73,15 @@ Run 결정:
 1. `--force` → `create_run(TICKET_KEY)` — 항상 새 run 생성
 2. `--force` 없음 → `resolve_run(TICKET_KEY)` — 기존 활성 run이 있으면 이어서 진행, 없으면 새 run 생성
 3. `RUN_DIR`을 해당 run의 절대 경로로 설정
+
+**Hooks 활성화** — Run 결정 후 반드시 실행:
+```bash
+export ATLAS_ACTIVE=1
+export ATLAS_PROJECT_ROOT="${PROJECT_ROOT}"
+export ATLAS_CONVENTIONS="${PROJECT_ROOT}/.automation/conventions.json"
+export ATLAS_RUN_DIR="${RUN_DIR}"
+```
+이 시점부터 Claude Code Hooks가 활성화된다.
 
 ### 2. Learn — 컨벤션 학습
 
@@ -90,6 +117,14 @@ Run 결정:
 ### 6. 결과 출력
 
 완료/실패 Task 현황, 생성된 커밋 수, 수정된 파일 수, audit 결과를 요약한다.
+
+**Hooks 비활성화** — 파이프라인 종료 시 반드시 실행:
+```bash
+export ATLAS_ACTIVE=
+export ATLAS_CURRENT_TASK=
+export ATLAS_SCOPE_FILES=
+export ATLAS_RETRY_COUNT=0
+```
 
 ## 매크로 엣지 (Step 간 전이)
 
@@ -206,3 +241,4 @@ update_task_status "$RUN_DIR" "3" "failed" "3회 재시도 실패" "$ERROR_DATA"
 - [v3 설계 철학](v3-design-philosophy.md)
 - [v1 vs v2 분석](v1-vs-v2-analysis.md)
 - [v3 구현 계획](v3-implementation-plan.md)
+- [v4 구현 계획 (Hooks + RALP)](../../../idea-bank/260317-work-order/atlas-v4-implementation-plan.md)

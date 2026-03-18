@@ -44,11 +44,46 @@ done
 
 cd "$PROJECT_ROOT"
 
-# 목적: 검증 실패 시 에러 증거를 자동 기록한다
+# 목적: 검증 실패 시 에러 증거를 자동 기록한다 (taxonomy 포함)
 _record_validate_error() {
   local exit_code="$1" gate_failed="$2" stderr_msg="$3"
   if [ -n "$TASK_ID" ] && [ -n "$RUN_DIR" ]; then
     mkdir -p "${RUN_DIR}/evidence/execute/task-${TASK_ID}"
+
+    # taxonomy 분류 — completion-gate.sh가 이 값으로 피드백을 분기한다
+    local taxonomy="unknown"
+    case "$exit_code" in
+      1) taxonomy="scope_violation" ;;
+      2) taxonomy="compile_error" ;;
+      3) taxonomy="lint_violation" ;;
+      4) taxonomy="domain_lint" ;;
+    esac
+
+    # validate.json에 실패 결과 기록 (completion-gate가 읽는 표준 파일)
+    local result_file="${RUN_DIR}/evidence/execute/task-${TASK_ID}/validate.json"
+    jq -n \
+      --arg type "validate_result" \
+      --arg script "validate.sh" \
+      --arg status "fail" \
+      --arg taxonomy "$taxonomy" \
+      --arg task_id "$TASK_ID" \
+      --argjson exit_code "$exit_code" \
+      --arg gate_failed "$gate_failed" \
+      --arg output_tail "$stderr_msg" \
+      --arg ts "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+      '{
+        type: $type,
+        script: $script,
+        status: $status,
+        taxonomy: $taxonomy,
+        task_id: $task_id,
+        exit_code: $exit_code,
+        gate_failed: $gate_failed,
+        output_tail: $output_tail,
+        timestamp: $ts
+      }' > "$result_file"
+
+    # 상세 에러 정보도 별도 파일에 보존
     local error_file="${RUN_DIR}/evidence/execute/task-${TASK_ID}/validate.error.json"
     jq -n \
       --arg type "script_error" \
@@ -56,6 +91,7 @@ _record_validate_error() {
       --arg task_id "$TASK_ID" \
       --argjson exit_code "$exit_code" \
       --arg gate_failed "$gate_failed" \
+      --arg taxonomy "$taxonomy" \
       --arg stderr "$stderr_msg" \
       --arg ts "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
       '{
@@ -64,6 +100,7 @@ _record_validate_error() {
         task_id: $task_id,
         exit_code: $exit_code,
         gate_failed: $gate_failed,
+        taxonomy: $taxonomy,
         stderr: $stderr,
         timestamp: $ts
       }' > "$error_file"
@@ -332,8 +369,10 @@ if [ -n "$TASK_ID" ] && [ -n "$RUN_DIR" ]; then
     GATES_JSON=$(printf '%s\n' "${GATES_PASSED[@]}" | jq -R . | jq -s .)
   fi
   jq -n \
-    --arg type "script" \
+    --arg type "validate_result" \
     --arg script "validate.sh" \
+    --arg status "pass" \
+    --arg taxonomy "pass" \
     --arg task_id "$TASK_ID" \
     --argjson exit_code 0 \
     --argjson gates_passed "$GATES_JSON" \
@@ -341,6 +380,8 @@ if [ -n "$TASK_ID" ] && [ -n "$RUN_DIR" ]; then
     '{
       type: $type,
       script: $script,
+      status: $status,
+      taxonomy: $taxonomy,
       task_id: $task_id,
       exit_code: $exit_code,
       gates_passed: $gates_passed,

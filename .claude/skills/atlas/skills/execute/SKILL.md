@@ -4,7 +4,28 @@ description: >
   tasks/ 개별 파일의 Task를 순회하며 코드 생성, 레이어별 병렬 레드팀, validate.sh 실행, Task별 커밋. 모든 증거는 헬퍼 함수로 자동 기록.
 ---
 
-# /execute — 코드 생성 + 검증 + 커밋
+# /execute — 코드 생성 + 검증 + 커밋 (RALP 루프)
+
+## RALP 개요
+
+execute는 Claude Code Hooks 기반 **RALP(Read→Act→Lint→Prove) 루프**로 작동한다.
+
+```
+[코드 생성 (Write/Edit)]
+  → PostToolUse: post-edit-lint.sh — 자동 빌드 체크, 에러 피드백
+  → [에러 수정]
+  → ...반복...
+
+[validate.sh 실행]
+  → PostToolUse: evidence-collector.sh — 결과 자동 기록
+
+[Task "완료" 선언 → Stop]
+  → Stop: completion-gate.sh — validate PASS 증거 확인
+  → 증거 없음/FAIL → block + 피드백 (자동 재시도)
+  → 증거 PASS + 레드팀 증거 → 통과 → 커밋
+```
+
+**핵심**: validate.sh PASS 증거 없이는 물리적으로 다음 Task로 넘어갈 수 없다.
 
 ## 실행 흐름
 
@@ -20,6 +41,18 @@ description: >
 `depends_on`을 존중하여 의존성이 없는 Task부터 순차 실행한다.
 
 **각 Task에 대해:**
+
+#### 0. Hooks 환경변수 설정 (Task 시작 전 필수)
+
+```bash
+export ATLAS_CURRENT_TASK="{TASK_ID}"
+export ATLAS_SCOPE_FILES="{Task의 files 목록, 공백 구분}"
+export ATLAS_RETRY_COUNT=0
+```
+
+이 시점부터 해당 Task에 대해:
+- `scope-guard.sh`: Write/Edit 시 forbidden path 차단 + scope 밖 경고
+- `completion-gate.sh`: Stop 시 validate 증거 + 레드팀 증거 확인
 
 #### a. 코드 생성
 
@@ -74,10 +107,39 @@ bash scripts/validate.sh \
 - `--source-dir`: 도메인 린트 탐색 대상 디렉토리 (프로젝트 소스 루트)
 - 증거는 validate.sh가 자동 기록한다 (성공/실패 모두)
 
-#### f. 실패 시 재시도
+#### f. 실패 시 재시도 (RALP)
 
-- 최대 3회 재시도 (a~g 반복)
-- 3회 초과: `update_task_status RUN_DIR TASK_ID "failed" "3회 재시도 실패"` + 사용자 보고
+validate.sh 실패 시 RALP 루프가 작동한다:
+
+1. **재시도 카운터 증가:**
+   ```bash
+   export ATLAS_RETRY_COUNT=$((ATLAS_RETRY_COUNT + 1))
+   ```
+
+2. **failure_history 기록:**
+   ```bash
+   TAXONOMY=$(jq -r '.taxonomy // "unknown"' "${RUN_DIR}/evidence/execute/task-${TASK_ID}/validate.json")
+   record_failure_history "$RUN_DIR" "$TASK_ID" "$ATLAS_RETRY_COUNT" "$TAXONOMY" \
+     "evidence/execute/task-${TASK_ID}/validate.json"
+   ```
+
+3. **이전 validate 결과 삭제 후 재시도:**
+   ```bash
+   rm -f "${RUN_DIR}/evidence/execute/task-${TASK_ID}/validate.json"
+   rm -f "${RUN_DIR}/evidence/execute/task-${TASK_ID}/validate.error.json"
+   ```
+
+4. **completion-gate.sh가 taxonomy별 피드백 제공:**
+   - `compile_error` → "빌드 에러를 수정하세요" + 에러 메시지
+   - `lint_violation` → "린트 위반을 수정하세요" + 위반 목록
+   - `domain_lint` → "도메인 린트 규칙을 확인하세요" + 위반 상세
+   - `scope_violation` → "scope 밖 파일을 되돌리세요"
+
+5. **최대 5회** 재시도 후 에스컬레이션 (completion-gate가 자동 해제):
+   ```bash
+   update_task_status "$RUN_DIR" "$TASK_ID" "failed" "5회 RALP 재시도 실패"
+   ```
+   + 사용자 보고
 
 #### g. 레드팀 증거 게이트 (커밋 전 필수)
 
@@ -97,6 +159,14 @@ bash scripts/validate.sh \
 3. `complete_task "$RUN_DIR" TASK_ID COMMIT_HASH "커밋 메시지"` — status + commit 증거 자동
 
 **주의: `update_task_status`를 직접 호출하지 않는다. `complete_task`가 내부에서 호출한다.**
+
+#### i. Hooks 환경변수 초기화 (Task 종료 후)
+
+```bash
+export ATLAS_CURRENT_TASK=""
+export ATLAS_SCOPE_FILES=""
+export ATLAS_RETRY_COUNT=0
+```
 
 ### 3. 완료
 
