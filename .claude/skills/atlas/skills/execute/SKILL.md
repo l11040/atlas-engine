@@ -60,7 +60,19 @@ export ATLAS_RETRY_COUNT=0
 - 기존 코드와 일관성을 유지한다 (주변 파일을 읽어 패턴 파악)
 - **증거:** `record_generate_evidence "$RUN_DIR" TASK_ID "생성파일들" "수정파일들"`
 
-#### b. Pre-build 검증
+#### b. Convention Check (프로젝트 컨벤션 검증)
+
+코드 생성 직후, 빌드 전에 프로젝트 컨벤션을 검증한다.
+
+1. `skills/convention-check/SKILL.md`를 읽고 절차를 따른다
+2. Task의 files 패턴에 맞는 체크리스트를 `references/convention-map.yaml`에서 결정
+3. 해당 체크리스트 항목을 하나씩 검증 (PASS/FAIL + 근거)
+4. FAIL 항목 자동 수정 시도
+5. 증거 기록: `bash skills/convention-check/scripts/record-convention-evidence.sh --run-dir "${RUN_DIR}" --task-id "${TASK_ID}" --results 'JSON'`
+
+**이 단계를 건너뛰면 completion-gate가 Task 완료를 차단한다.**
+
+#### c. Pre-build 검증
 
 레드팀 전에 컴파일 에러를 잡는다. `--scope` 없이 빌드만 확인.
 
@@ -71,7 +83,7 @@ bash scripts/validate.sh \
   --task-id TASK_ID --run-dir "${RUN_DIR}"
 ```
 
-#### c. 레드팀 (레이어별 병렬)
+#### d. 레드팀 (레이어별 병렬)
 
 빌드 통과 후, **Agent tool로 레이어별 서브에이전트를 병렬 실행**한다.
 레이어 구성은 프로젝트 스택에 따라 결정한다 (conventions.json의 production_rules 카테고리 참조).
@@ -87,11 +99,11 @@ bash scripts/validate.sh \
 - 레이어별: `record_redteam_evidence "$RUN_DIR" TASK_ID LAYER CHECKS_JSON FIXES_JSON`
 - 요약: `record_redteam_summary "$RUN_DIR" TASK_ID LAYERS_JSON TOTAL_FIXES`
 
-#### d. 피드백 반영
+#### e. 피드백 반영
 
 레드팀 `fail` 항목의 수정 지시를 코드에 반영한다. `fail`이 없으면 스킵.
 
-#### e. validate.sh 실행 (전체 게이트)
+#### f. validate.sh 실행 (전체 게이트)
 
 ```bash
 bash scripts/validate.sh \
@@ -107,7 +119,7 @@ bash scripts/validate.sh \
 - `--source-dir`: 도메인 린트 탐색 대상 디렉토리 (프로젝트 소스 루트)
 - 증거는 validate.sh가 자동 기록한다 (성공/실패 모두)
 
-#### f. 실패 시 재시도 (RALP)
+#### g. 실패 시 재시도 (RALP)
 
 validate.sh 실패 시 RALP 루프가 작동한다:
 
@@ -141,7 +153,7 @@ validate.sh 실패 시 RALP 루프가 작동한다:
    ```
    + 사용자 보고
 
-#### g. 레드팀 증거 게이트 (커밋 전 필수)
+#### h. 레드팀 증거 게이트 (커밋 전 필수)
 
 커밋 전에 `${RUN_DIR}/evidence/execute/task-{id}/redteam-summary.json`의 **존재 여부를 확인**한다.
 
@@ -152,7 +164,7 @@ validate.sh 실패 시 RALP 루프가 작동한다:
   ```
 - **증거 부족 시**: 사용자에게 보고하고 레드팀(c단계)부터 재실행한다
 
-#### h. 성공 시 커밋
+#### i. 성공 시 커밋
 
 1. `git add` — Task의 files만 스테이징
 2. `git commit` — `feat({scope}): {title}` 형식
@@ -160,7 +172,7 @@ validate.sh 실패 시 RALP 루프가 작동한다:
 
 **주의: `update_task_status`를 직접 호출하지 않는다. `complete_task`가 내부에서 호출한다.**
 
-#### i. Hooks 환경변수 초기화 (Task 종료 후)
+#### j. Hooks 환경변수 초기화 (Task 종료 후)
 
 ```bash
 export ATLAS_CURRENT_TASK=""

@@ -1,0 +1,292 @@
+# Convention Registry — 전체 컨벤션 스킬 목록 + 파일 패턴 매핑
+# convention-check 오케스트레이터가 이 파일을 읽고 적용할 스킬을 결정한다.
+#
+# 새 컨벤션 추가: 이 파일에 항목을 추가하면 자동으로 convention-check에 포함된다.
+# 비활성화: enabled: false로 설정
+
+# ─── Backend: Entity ───
+backend-entity:
+  path: backend/entity
+  applies_to:
+    patterns: ["*Entity.java"]
+    excludes: ["*Embeddable.java"]
+  skills:
+    - id: ENT-001
+      name: base-entity
+      priority: critical
+      auto_fix: true
+      enabled: true
+
+    - id: ENT-002
+      name: optimistic-lock
+      priority: critical
+      auto_fix: true
+      enabled: true
+
+    - id: ENT-003
+      name: soft-delete
+      priority: critical
+      auto_fix: true
+      enabled: true
+
+    - id: ENT-004
+      name: audit-listener
+      priority: critical
+      auto_fix: true
+      enabled: true
+
+    - id: ENT-005
+      name: protected-constructor
+      priority: high
+      auto_fix: true
+      enabled: true
+
+    - id: ENT-006
+      name: enum-mapping
+      priority: high
+      auto_fix: true
+      enabled: true
+
+    - id: ENT-007
+      name: file-location
+      priority: medium
+      auto_fix: false
+      enabled: true
+
+# ─── Backend: API ───
+backend-api:
+  path: backend/api
+  applies_to:
+    patterns: ["*Controller.java"]
+  skills:
+    - id: API-001
+      name: response-wrapper
+      priority: critical
+      auto_fix: true
+      enabled: true
+
+    - id: API-002
+      name: swagger-docs
+      priority: high
+      auto_fix: true
+      enabled: true
+
+    - id: API-003
+      name: global-exception
+      priority: critical
+      auto_fix: true
+      enabled: true
+
+    - id: API-004
+      name: dto-naming
+      priority: medium
+      auto_fix: false
+      enabled: true
+
+    - id: API-005
+      name: controller-location
+      priority: medium
+      auto_fix: false
+      enabled: true
+
+# ─── Backend: Service ───
+backend-service:
+  path: backend/service
+  applies_to:
+    patterns: ["*Service.java"]
+    excludes: ["*ServiceImpl.java"]
+  skills:
+    - id: SVC-001
+      name: transaction-default
+      priority: critical
+      auto_fix: true
+      enabled: true
+
+    - id: SVC-002
+      name: no-interface
+      priority: high
+      auto_fix: false
+      enabled: true
+
+    - id: SVC-003
+      name: file-location
+      priority: medium
+      auto_fix: false
+      enabled: true
+
+# ─── Backend: Repository ───
+backend-repository:
+  path: backend/repository
+  applies_to:
+    patterns: ["*Repository.java", "*CustomRepository.java"]
+  skills:
+    - id: REP-001
+      name: jpa-repository
+      priority: high
+      auto_fix: true
+      enabled: true
+
+    - id: REP-002
+      name: querydsl-separation
+      priority: medium
+      auto_fix: false
+      enabled: true
+
+# ─── Backend: Common (모든 Java 파일) ───
+backend-common:
+  path: backend/common
+  applies_to:
+    patterns: ["*.java"]
+  skills:
+    - id: CMN-001
+      name: no-redis
+      priority: critical  # 절대 규칙
+      auto_fix: true
+      enabled: true
+
+    - id: CMN-002
+      name: caffeine-only
+      priority: high
+      auto_fix: false
+      enabled: true
+
+    - id: CMN-003
+      name: idempotency
+      priority: high
+      auto_fix: false
+      enabled: true
+
+    - id: CMN-004
+      name: n-plus-one
+      priority: high
+      auto_fix: false
+      enabled: true
+
+# ─── Backend: Migration ───
+backend-migration:
+  path: backend/migration
+  applies_to:
+    patterns: ["V*__*.sql", "V*__.sql"]
+  skills:
+    - id: MIG-001
+      name: flyway-naming
+      priority: critical
+      auto_fix: false
+      enabled: true
+
+    - id: MIG-002
+      name: soft-delete-column
+      priority: critical
+      auto_fix: true
+      enabled: true
+
+    - id: MIG-003
+      name: version-column
+      priority: critical
+      auto_fix: true
+      enabled: true
+
+    - id: MIG-004
+      name: audit-columns
+      priority: critical
+      auto_fix: true
+      enabled: true
+
+# ─── Frontend: Page ───
+frontend-page:
+  path: frontend/page
+  applies_to:
+    patterns: ["page.tsx"]
+  skills:
+    - id: FE-001
+      name: metadata-export
+      priority: high
+      auto_fix: true
+      enabled: true
+
+    - id: FE-002
+      name: suspense-boundary
+      priority: high
+      auto_fix: true
+      enabled: true
+
+# ─── Frontend: Component ───
+frontend-component:
+  path: frontend/component
+  applies_to:
+    patterns: ["*.tsx"]
+    path_contains: ["_components/", "features/", "components/"]
+  skills:
+    - id: FE-003
+      name: file-location
+      priority: medium
+      auto_fix: false
+      enabled: true
+
+# ─── Frontend: State ───
+frontend-state:
+  path: frontend/state
+  applies_to:
+    patterns: ["*.tsx", "*.ts"]
+    path_contains: ["features/", "hooks/", "stores/"]
+  skills:
+    - id: FE-004
+      name: tanstack-query
+      priority: high
+      auto_fix: false
+      enabled: true
+
+    - id: FE-005
+      name: zustand
+      priority: high
+      auto_fix: false
+      enabled: true
+
+# ─── Frontend: API ───
+frontend-api:
+  path: frontend/api
+  applies_to:
+    patterns: ["*.tsx", "*.ts"]
+  skills:
+    - id: FE-006
+      name: orval-only
+      priority: critical  # 절대 규칙
+      auto_fix: false
+      enabled: true
+
+    - id: FE-007
+      name: no-manual-fetch
+      priority: critical  # 절대 규칙
+      auto_fix: false
+      enabled: true
+
+# ─── Frontend: Common ───
+frontend-common:
+  path: frontend/common
+  applies_to:
+    patterns: ["*.tsx", "*.ts"]
+  skills:
+    - id: FE-008
+      name: kebab-case
+      priority: high
+      auto_fix: false
+      enabled: true
+
+    - id: FE-009
+      name: shadcn-ui
+      priority: medium
+      auto_fix: false
+      enabled: true
+
+# ─── Project: 프로젝트 고유 컨벤션 ───
+# 아래에 프로젝트별 고유 컨벤션을 추가한다.
+# project-custom:
+#   path: project
+#   applies_to:
+#     patterns: ["*.java"]
+#   skills:
+#     - id: PRJ-001
+#       name: custom-convention-name
+#       priority: high
+#       auto_fix: false
+#       enabled: true

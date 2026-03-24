@@ -90,5 +90,29 @@ if [ ! -f "$REDTEAM_FILE" ] && [ ! -f "$REDTEAM_SKIP" ]; then
   exit 0
 fi
 
+# ── Gate 4: convention-check 증거 확인 ──
+CONVENTION_FILE="${EVIDENCE_DIR}/convention-check.json"
+
+if [ ! -f "$CONVENTION_FILE" ]; then
+  jq -n --arg task "$TASK_ID" '{
+    decision: "block",
+    reason: "convention-check not executed",
+    systemMessage: ("GATE BLOCKED: Task " + $task + " — convention-check가 아직 실행되지 않았습니다. convention-check 스킬의 체크리스트를 실행하고 증거를 기록하세요.")
+  }'
+  exit 0
+fi
+
+# convention-check 결과가 FAIL이면 차단
+CONV_FAIL_COUNT=$(jq -r '.summary.fail // 0' "$CONVENTION_FILE" 2>/dev/null)
+if [ "$CONV_FAIL_COUNT" -gt 0 ]; then
+  CONV_FAILURES=$(jq -r '.checks[] | select(.status == "FAIL") | "  [\(.id)] \(.rule): \(.fix_hint // "수동 수정 필요")"' "$CONVENTION_FILE" 2>/dev/null)
+  jq -n --arg task "$TASK_ID" --arg fails "$CONV_FAILURES" --arg count "$CONV_FAIL_COUNT" '{
+    decision: "block",
+    reason: ("convention-check failed: " + $count + " violations"),
+    systemMessage: ("GATE BLOCKED [convention]: Task " + $task + " — " + $count + "건의 컨벤션 위반이 있습니다:\n" + $fails + "\n\n위반 항목을 수정하고 convention-check를 다시 실행하세요. (기존 convention-check.json 삭제 후 재실행)")
+  }'
+  exit 0
+fi
+
 # ── 모든 게이트 통과 ──
 exit 0
