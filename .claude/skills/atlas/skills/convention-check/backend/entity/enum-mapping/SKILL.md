@@ -43,15 +43,6 @@ private PointStatus status;
 - Enum에 `@Enumerated` 없으면 JPA 기본값은 ORDINAL — 이것이 가장 흔한 실수
 - DDL에서 해당 컬럼은 `VARCHAR` 타입이어야 STRING 매핑과 일치
 
-## 증거 포맷
+## 증거
 
-```json
-{
-  "id": "ENT-006",
-  "category": "backend/entity",
-  "rule": "Enum은 EnumType.STRING",
-  "status": "PASS|FAIL|SKIP",
-  "evidence": "STRING 매핑 확인|ORDINAL 또는 누락|Enum 필드 없음",
-  "file": "대상 파일 경로"
-}
-```
+개별 스킬은 증거를 직접 작성하지 않는다. 검증 결과(id, rule, status, evidence, fix_hint)를 오케스트레이터에 반환하면, `record-convention-evidence.sh`가 `convention-check.schema.json` 표준 포맷으로 통합 기록한다.

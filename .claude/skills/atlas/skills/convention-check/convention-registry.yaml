@@ -53,6 +53,18 @@ backend-entity:
       auto_fix: false
       enabled: true
 
+    - id: ENT-008
+      name: unique-constraint
+      priority: critical
+      auto_fix: true
+      enabled: true
+
+    - id: ENT-009
+      name: jpa-relation
+      priority: high
+      auto_fix: false
+      enabled: true
+
 # ─── Backend: API ───
 backend-api:
   path: backend/api
@@ -162,6 +174,12 @@ backend-common:
       auto_fix: false
       enabled: true
 
+    - id: CMN-005
+      name: exception-consistency
+      priority: high
+      auto_fix: false
+      enabled: true
+
 # ─── Backend: Migration ───
 backend-migration:
   path: backend/migration
@@ -188,6 +206,42 @@ backend-migration:
 
     - id: MIG-004
       name: audit-columns
+      priority: critical
+      auto_fix: true
+      enabled: true
+
+    - id: MIG-005
+      name: unique-index
+      priority: critical
+      auto_fix: true
+      enabled: true
+
+# ─── Backend: Batch ───
+backend-batch:
+  path: backend/batch
+  applies_to:
+    patterns: ["*Config.java", "*Processor.java", "*Reader.java", "*Writer.java", "*Scheduler.java"]
+  skills:
+    - id: BAT-001
+      name: step-scope
+      priority: critical
+      auto_fix: true
+      enabled: true
+
+    - id: BAT-002
+      name: fault-tolerant
+      priority: high
+      auto_fix: false
+      enabled: true
+
+    - id: BAT-003
+      name: n-plus-one-batch
+      priority: critical
+      auto_fix: false
+      enabled: true
+
+    - id: BAT-004
+      name: scheduler-zone
       priority: critical
       auto_fix: true
       enabled: true

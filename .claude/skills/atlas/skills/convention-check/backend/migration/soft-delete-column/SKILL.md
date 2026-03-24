@@ -42,15 +42,6 @@ CREATE TABLE point_account (
 
 누락된 컬럼을 DDL에 추가.
 
-## 증거 포맷
+## 증거
 
-```json
-{
-  "id": "MIG-002",
-  "category": "backend/migration",
-  "rule": "Soft Delete 컬럼",
-  "status": "PASS|FAIL",
-  "evidence": "deleted_at + audit 컬럼 확인|컬럼 누락",
-  "missing_columns": ["deleted_at"]
-}
-```
+개별 스킬은 증거를 직접 작성하지 않는다. 검증 결과(id, rule, status, evidence, fix_hint)를 오케스트레이터에 반환하면, `record-convention-evidence.sh`가 `convention-check.schema.json` 표준 포맷으로 통합 기록한다.

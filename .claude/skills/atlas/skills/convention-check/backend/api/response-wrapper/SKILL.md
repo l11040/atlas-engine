@@ -49,18 +49,6 @@ public Map<String, Object> getStats() { }
 - 목록 조회 시 `ApiResponse<List<DTO>>` 또는 `ApiResponse<Page<DTO>>` 형태
 - 에러 응답은 GlobalExceptionHandler가 자동 래핑하므로 Controller에서 처리하지 않는다
 
-## 증거 포맷
+## 증거
 
-```json
-{
-  "id": "API-001",
-  "category": "backend/api",
-  "rule": "ApiResponse 래핑",
-  "status": "PASS|FAIL",
-  "evidence": "모든 메서드 ResponseEntity<ApiResponse<T>> 확인|래핑되지 않은 메서드 발견",
-  "file": "대상 파일 경로",
-  "methods_checked": 5,
-  "methods_passed": 4,
-  "failing_methods": ["getStats"]
-}
-```
+개별 스킬은 증거를 직접 작성하지 않는다. 검증 결과(id, rule, status, evidence, fix_hint)를 오케스트레이터에 반환하면, `record-convention-evidence.sh`가 `convention-check.schema.json` 표준 포맷으로 통합 기록한다.

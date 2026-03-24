@@ -41,14 +41,6 @@ CREATE TABLE point_account (
 - DEFAULT 0은 @Version의 초기값과 일치해야 한다
 - ALTER TABLE로 추가할 때도 `DEFAULT 0` 필수 (기존 행의 version 초기화)
 
-## 증거 포맷
+## 증거
 
-```json
-{
-  "id": "MIG-003",
-  "category": "backend/migration",
-  "rule": "version 컬럼",
-  "status": "PASS|FAIL",
-  "evidence": "version BIGINT NOT NULL DEFAULT 0 확인|컬럼 누락"
-}
-```
+개별 스킬은 증거를 직접 작성하지 않는다. 검증 결과(id, rule, status, evidence, fix_hint)를 오케스트레이터에 반환하면, `record-convention-evidence.sh`가 `convention-check.schema.json` 표준 포맷으로 통합 기록한다.

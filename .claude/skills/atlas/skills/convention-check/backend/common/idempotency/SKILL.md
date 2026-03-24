@@ -54,14 +54,6 @@ public ResponseEntity<ApiResponse<EarnPointsResponse>> earnPoints(
 - 멱등키 저장소: DB 테이블 또는 Caffeine 캐시 (TTL 기반)
 - 결제 API는 필수, 단순 CRUD 생성은 권장 수준
 
-## 증거 포맷
+## 증거
 
-```json
-{
-  "id": "CMN-003",
-  "category": "backend/common",
-  "rule": "멱등성 패턴",
-  "status": "PASS|FAIL|SKIP",
-  "evidence": "멱등키 파라미터 + 중복 체크 확인|부작용 API에 멱등키 없음|부작용 API 아님"
-}
-```
+개별 스킬은 증거를 직접 작성하지 않는다. 검증 결과(id, rule, status, evidence, fix_hint)를 오케스트레이터에 반환하면, `record-convention-evidence.sh`가 `convention-check.schema.json` 표준 포맷으로 통합 기록한다.

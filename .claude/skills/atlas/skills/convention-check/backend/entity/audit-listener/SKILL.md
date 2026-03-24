@@ -40,17 +40,6 @@ public class PointEntity extends BaseEntity { }
 - 프로젝트의 BaseEntity 구현을 먼저 확인하고, BaseEntity에 없을 경우에만 FAIL 처리
 - `@EnableJpaAuditing` 설정이 Configuration에 있어야 실제로 동작한다
 
-## 증거 포맷
+## 증거
 
-```json
-{
-  "id": "ENT-004",
-  "category": "backend/entity",
-  "rule": "Audit 리스너",
-  "status": "PASS|FAIL",
-  "evidence": "@EntityListeners 확인|누락",
-  "file": "대상 파일 경로",
-  "fix_applied": false,
-  "fix_hint": "@EntityListeners(AuditingEntityListener.class) 추가"
-}
-```
+개별 스킬은 증거를 직접 작성하지 않는다. 검증 결과(id, rule, status, evidence, fix_hint)를 오케스트레이터에 반환하면, `record-convention-evidence.sh`가 `convention-check.schema.json` 표준 포맷으로 통합 기록한다.

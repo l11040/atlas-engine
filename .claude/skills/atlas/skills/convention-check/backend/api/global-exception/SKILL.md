@@ -47,15 +47,6 @@ public ResponseEntity<ApiResponse<PointDetailResponse>> getPoint(@PathVariable L
 - GlobalExceptionHandler가 프로젝트에 존재하는지 먼저 확인
 - 정말 Controller 레벨에서 잡아야 하는 예외(예: 파일 업로드)는 예외적으로 허용
 
-## 증거 포맷
+## 증거
 
-```json
-{
-  "id": "API-003",
-  "category": "backend/api",
-  "rule": "GlobalException 위임",
-  "status": "PASS|FAIL",
-  "evidence": "try-catch 없음|Controller 내 try-catch 발견",
-  "file": "대상 파일 경로"
-}
-```
+개별 스킬은 증거를 직접 작성하지 않는다. 검증 결과(id, rule, status, evidence, fix_hint)를 오케스트레이터에 반환하면, `record-convention-evidence.sh`가 `convention-check.schema.json` 표준 포맷으로 통합 기록한다.

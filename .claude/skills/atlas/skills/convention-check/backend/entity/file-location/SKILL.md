@@ -35,14 +35,6 @@ core/src/main/java/.../core/entity/point/Point.java
 
 파일 이동은 위험하므로 **경고만** 출력. 수동 이동 안내.
 
-## 증거 포맷
+## 증거
 
-```json
-{
-  "id": "ENT-007",
-  "category": "backend/entity",
-  "rule": "엔티티 파일 위치",
-  "status": "PASS|FAIL",
-  "evidence": "core/entity/{도메인}/ 위치 확인|잘못된 위치"
-}
-```
+개별 스킬은 증거를 직접 작성하지 않는다. 검증 결과(id, rule, status, evidence, fix_hint)를 오케스트레이터에 반환하면, `record-convention-evidence.sh`가 `convention-check.schema.json` 표준 포맷으로 통합 기록한다.

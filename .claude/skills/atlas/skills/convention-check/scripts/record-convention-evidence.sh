@@ -27,9 +27,47 @@ mkdir -p "$EVIDENCE_DIR"
 
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-# results JSON에 timestamp 추가하여 저장
-echo "$RESULTS" | jq --arg ts "$TIMESTAMP" '. + {timestamp: $ts}' \
-  > "${EVIDENCE_DIR}/convention-check.json"
+# 목적: 입력 JSON을 convention-check.schema.json에 맞게 정규화하여 저장한다
+# 주의: 서브에이전트가 임의 구조로 전달해도 필수 필드를 보장한다
+echo "$RESULTS" | jq --arg ts "$TIMESTAMP" --arg tid "$TASK_ID" '
+  # type 필드 강제
+  .type = "convention_check" |
+  # task_id 강제
+  .task_id = $tid |
+  # skills_applied 기본값 보장
+  .skills_applied = (.skills_applied // []) |
+  # checks 배열 정규화 — 각 항목에 필수 필드 보장
+  .checks = ((.checks // []) | map(
+    {
+      id: (.id // "UNKNOWN"),
+      rule: (.rule // .item // .description // "unknown"),
+      status: (.status // (.result // "SKIP") | ascii_upcase),
+      evidence: (.evidence // .line_ref // .detail // "N/A"),
+      fix_hint: (.fix_hint // null)
+    } | if .fix_hint == null then del(.fix_hint) else . end
+  )) |
+  # summary 보장
+  .summary = (
+    if .summary then .summary
+    else
+      { total: (.checks | length),
+        pass: ([.checks[] | select(.status == "PASS")] | length),
+        fail: ([.checks[] | select(.status == "FAIL")] | length),
+        skip: ([.checks[] | select(.status == "SKIP")] | length),
+        pass_rate: (
+          if (.checks | length) > 0
+          then "\((([.checks[] | select(.status == "PASS")] | length) * 1000 / (.checks | length) | . / 10))%"
+          else "100.0%"
+          end
+        )
+      }
+    end
+  ) |
+  # timestamp 추가
+  .timestamp = $ts |
+  # additionalProperties 제거 — 스키마에 정의된 필드만 유지
+  {type, task_id, skills_applied, checks, summary, timestamp}
+' > "${EVIDENCE_DIR}/convention-check.json"
 
 # 요약 출력
 PASS_COUNT=$(echo "$RESULTS" | jq -r '.summary.pass // 0')

@@ -45,18 +45,6 @@ public class PointEntity {
 - `@Id`, `@GeneratedValue`를 엔티티에 직접 선언하면 BaseEntity의 id와 충돌한다
 - Embeddable 클래스는 BaseEntity를 상속하지 않는다 (검증 제외)
 
-## 증거 포맷
+## 증거
 
-```json
-{
-  "id": "ENT-001",
-  "category": "backend/entity",
-  "rule": "BaseEntity 상속",
-  "status": "PASS|FAIL",
-  "evidence": "extends BaseEntity 확인|extends BaseEntity 누락",
-  "file": "대상 파일 경로",
-  "line": 15,
-  "fix_applied": false,
-  "fix_hint": "extends BaseEntity 추가"
-}
-```
+개별 스킬은 증거를 직접 작성하지 않는다. 검증 결과(id, rule, status, evidence, fix_hint)를 오케스트레이터에 반환하면, `record-convention-evidence.sh`가 `convention-check.schema.json` 표준 포맷으로 통합 기록한다.

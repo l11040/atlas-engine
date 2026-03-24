@@ -48,15 +48,6 @@ import org.springframework.data.redis.core.RedisTemplate;
 - Caffeine은 로컬 캐시이므로 멀티 인스턴스 환경에서 캐시 정합성 제약이 있다
 - 세션 스토어도 Redis 대신 DB 또는 JWT 기반 사용
 
-## 증거 포맷
+## 증거
 
-```json
-{
-  "id": "CMN-001",
-  "category": "backend/common",
-  "rule": "Redis 사용 금지 (절대)",
-  "status": "PASS|FAIL",
-  "evidence": "Redis 참조 없음|Redis 참조 발견",
-  "violations": ["import org.springframework.data.redis..."]
-}
-```
+개별 스킬은 증거를 직접 작성하지 않는다. 검증 결과(id, rule, status, evidence, fix_hint)를 오케스트레이터에 반환하면, `record-convention-evidence.sh`가 `convention-check.schema.json` 표준 포맷으로 통합 기록한다.

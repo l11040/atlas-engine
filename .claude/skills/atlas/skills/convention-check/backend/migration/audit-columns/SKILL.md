@@ -20,14 +20,6 @@ description: >
 
 누락된 컬럼 추가.
 
-## 증거 포맷
+## 증거
 
-```json
-{
-  "id": "MIG-004",
-  "category": "backend/migration",
-  "rule": "Audit 컬럼",
-  "status": "PASS|FAIL",
-  "missing_columns": []
-}
-```
+개별 스킬은 증거를 직접 작성하지 않는다. 검증 결과(id, rule, status, evidence, fix_hint)를 오케스트레이터에 반환하면, `record-convention-evidence.sh`가 `convention-check.schema.json` 표준 포맷으로 통합 기록한다.

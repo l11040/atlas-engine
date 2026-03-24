@@ -44,17 +44,6 @@ public ResponseEntity<ApiResponse<PointDetailResponse>> getPoint(...) { }
 2. 각 메서드에 `@Operation(summary = "")` 추가 (메서드명에서 요약 생성)
 3. import 추가: `io.swagger.v3.oas.annotations.Operation`, `io.swagger.v3.oas.annotations.tags.Tag`
 
-## 증거 포맷
+## 증거
 
-```json
-{
-  "id": "API-002",
-  "category": "backend/api",
-  "rule": "Swagger 어노테이션",
-  "status": "PASS|FAIL",
-  "evidence": "@Tag + 모든 메서드 @Operation 확인|누락 항목 있음",
-  "file": "대상 파일 경로",
-  "tag_present": true,
-  "operations_missing": ["getStats"]
-}
-```
+개별 스킬은 증거를 직접 작성하지 않는다. 검증 결과(id, rule, status, evidence, fix_hint)를 오케스트레이터에 반환하면, `record-convention-evidence.sh`가 `convention-check.schema.json` 표준 포맷으로 통합 기록한다.

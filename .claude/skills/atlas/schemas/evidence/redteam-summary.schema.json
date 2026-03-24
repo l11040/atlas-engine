@@ -15,7 +15,8 @@
         "properties": {
           "layer": {
             "type": "string",
-            "enum": ["domain", "schema", "repository", "service", "batch"]
+            "enum": ["domain", "schema", "repository", "service", "batch", "controller", "dto", "test"],
+            "description": "레이어명. 프로젝트 스택에 따라 확장 가능"
           },
           "pass": { "type": "integer", "minimum": 0 },
           "fail": { "type": "integer", "minimum": 0 }

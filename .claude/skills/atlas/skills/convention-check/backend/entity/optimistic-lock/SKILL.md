@@ -49,18 +49,6 @@ public class PointEntity extends BaseEntity {
 - version 필드에 `@Column(nullable = false)` 추가 권장
 - v0.4.0에서 이 항목이 누락되어 "전진하면서 후퇴" 사례가 발생한 핵심 항목
 
-## 증거 포맷
+## 증거
 
-```json
-{
-  "id": "ENT-002",
-  "category": "backend/entity",
-  "rule": "@Version 낙관적 락",
-  "status": "PASS|FAIL",
-  "evidence": "@Version + version 필드 확인|@Version 어노테이션 또는 version 필드 누락",
-  "file": "대상 파일 경로",
-  "line": null,
-  "fix_applied": false,
-  "fix_hint": "@Version private Long version; 필드 추가"
-}
-```
+개별 스킬은 증거를 직접 작성하지 않는다. 검증 결과(id, rule, status, evidence, fix_hint)를 오케스트레이터에 반환하면, `record-convention-evidence.sh`가 `convention-check.schema.json` 표준 포맷으로 통합 기록한다.

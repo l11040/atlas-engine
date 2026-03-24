@@ -42,16 +42,6 @@ public PointEntity() {}
 - 다른 생성자가 있으면 컴파일러가 기본 생성자를 자동 생성하지 않으므로 반드시 명시
 - Lombok `@NoArgsConstructor`는 기본적으로 `public` — `access = AccessLevel.PROTECTED` 필수
 
-## 증거 포맷
+## 증거
 
-```json
-{
-  "id": "ENT-005",
-  "category": "backend/entity",
-  "rule": "protected 기본 생성자",
-  "status": "PASS|FAIL",
-  "evidence": "protected 생성자 확인|누락 또는 public",
-  "file": "대상 파일 경로",
-  "fix_applied": false
-}
-```
+개별 스킬은 증거를 직접 작성하지 않는다. 검증 결과(id, rule, status, evidence, fix_hint)를 오케스트레이터에 반환하면, `record-convention-evidence.sh`가 `convention-check.schema.json` 표준 포맷으로 통합 기록한다.

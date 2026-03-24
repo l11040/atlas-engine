@@ -114,5 +114,29 @@ if [ "$CONV_FAIL_COUNT" -gt 0 ]; then
   exit 0
 fi
 
+# ── Gate 5: evidence 포맷 검증 ──
+ATLAS_SKILL_DIR="${ATLAS_SKILL_DIR:-}"
+VALIDATE_EVIDENCE_SH=""
+
+# 주의: ATLAS_SKILL_DIR이 설정되어 있으면 해당 경로, 아니면 프로젝트 내부에서 탐색
+if [ -n "$ATLAS_SKILL_DIR" ] && [ -f "${ATLAS_SKILL_DIR}/scripts/validate-evidence.sh" ]; then
+  VALIDATE_EVIDENCE_SH="${ATLAS_SKILL_DIR}/scripts/validate-evidence.sh"
+elif [ -f "${CLAUDE_PROJECT_DIR:-.}/.claude/skills/atlas/scripts/validate-evidence.sh" ]; then
+  VALIDATE_EVIDENCE_SH="${CLAUDE_PROJECT_DIR:-.}/.claude/skills/atlas/scripts/validate-evidence.sh"
+fi
+
+if [ -n "$VALIDATE_EVIDENCE_SH" ]; then
+  EVIDENCE_RESULT=$(bash "$VALIDATE_EVIDENCE_SH" --run-dir "$RUN_DIR" --task-id "$TASK_ID" --fix-residual 2>&1) || {
+    # 실패 항목만 추출
+    FAILURES=$(echo "$EVIDENCE_RESULT" | grep "✗" | head -10)
+    jq -n --arg task "$TASK_ID" --arg fails "$FAILURES" '{
+      decision: "block",
+      reason: "evidence format validation failed",
+      systemMessage: ("GATE BLOCKED [evidence-format]: Task " + $task + " — 증거 파일 포맷이 스키마와 일치하지 않습니다:\n" + $fails + "\n\n반드시 common.sh 헬퍼 함수(record_generate_evidence, record_redteam_evidence, record_redteam_summary)와 record-convention-evidence.sh를 사용하여 증거를 기록하세요. cat > 또는 jq -n > 으로 직접 작성하지 마세요.")
+    }'
+    exit 0
+  }
+fi
+
 # ── 모든 게이트 통과 ──
 exit 0

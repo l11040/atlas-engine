@@ -39,14 +39,6 @@ public class PointServiceImpl implements PointService {
 
 경고만 출력. 인터페이스 제거는 영향 범위가 넓어 수동 처리.
 
-## 증거 포맷
+## 증거
 
-```json
-{
-  "id": "SVC-002",
-  "category": "backend/service",
-  "rule": "인터페이스 없는 구현체",
-  "status": "PASS|FAIL",
-  "evidence": "인터페이스 없이 직접 구현|불필요한 인터페이스 발견"
-}
-```
+개별 스킬은 증거를 직접 작성하지 않는다. 검증 결과(id, rule, status, evidence, fix_hint)를 오케스트레이터에 반환하면, `record-convention-evidence.sh`가 `convention-check.schema.json` 표준 포맷으로 통합 기록한다.

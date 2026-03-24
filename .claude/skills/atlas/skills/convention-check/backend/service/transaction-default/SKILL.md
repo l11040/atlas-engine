@@ -51,14 +51,6 @@ public class PointService {
 - 클래스 레벨 `readOnly = true`가 있으면 개별 읽기 메서드에 어노테이션 불필요
 - `@Transactional`만 쓰면 readOnly=false가 기본값 → CUD에 적합
 
-## 증거 포맷
+## 증거
 
-```json
-{
-  "id": "SVC-001",
-  "category": "backend/service",
-  "rule": "트랜잭션 기본값",
-  "status": "PASS|FAIL",
-  "evidence": "클래스 readOnly=true + CUD @Transactional 확인|설정 불일치"
-}
-```
+개별 스킬은 증거를 직접 작성하지 않는다. 검증 결과(id, rule, status, evidence, fix_hint)를 오케스트레이터에 반환하면, `record-convention-evidence.sh`가 `convention-check.schema.json` 표준 포맷으로 통합 기록한다.

@@ -53,17 +53,6 @@ public class PointEntity extends BaseEntity { }
 - 삭제된 데이터를 조회하려면 네이티브 쿼리 또는 별도 뷰가 필요
 - Repository에서 `deleteById` 호출 시 실제로는 `deletedAt = now()` 업데이트를 수행하는 커스텀 구현이 필요
 
-## 증거 포맷
+## 증거
 
-```json
-{
-  "id": "ENT-003",
-  "category": "backend/entity",
-  "rule": "Soft Delete 패턴",
-  "status": "PASS|FAIL",
-  "evidence": "@SQLRestriction + deletedAt 확인|패턴 누락",
-  "file": "대상 파일 경로",
-  "fix_applied": false,
-  "fix_hint": "@SQLRestriction(\"deleted_at IS NULL\") + deletedAt 필드 추가"
-}
-```
+개별 스킬은 증거를 직접 작성하지 않는다. 검증 결과(id, rule, status, evidence, fix_hint)를 오케스트레이터에 반환하면, `record-convention-evidence.sh`가 `convention-check.schema.json` 표준 포맷으로 통합 기록한다.

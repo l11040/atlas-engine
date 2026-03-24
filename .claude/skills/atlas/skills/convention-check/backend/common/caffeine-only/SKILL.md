@@ -37,14 +37,6 @@ public CacheManager cacheManager() {
 
 경고만 출력. 캐시 구현체 변경은 영향 범위가 넓어 수동 처리.
 
-## 증거 포맷
+## 증거
 
-```json
-{
-  "id": "CMN-002",
-  "category": "backend/common",
-  "rule": "Caffeine 캐시 전용",
-  "status": "PASS|FAIL|SKIP",
-  "evidence": "Caffeine 사용 확인|다른 캐시 구현체 발견|캐시 코드 없음"
-}
-```
+개별 스킬은 증거를 직접 작성하지 않는다. 검증 결과(id, rule, status, evidence, fix_hint)를 오케스트레이터에 반환하면, `record-convention-evidence.sh`가 `convention-check.schema.json` 표준 포맷으로 통합 기록한다.

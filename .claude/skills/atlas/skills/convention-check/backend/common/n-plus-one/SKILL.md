@@ -47,14 +47,6 @@ accounts.forEach(a -> a.getTransactions().size());  // N+1!
 - `@OneToMany`의 기본 fetch는 LAZY (올바름). 명시적으로 EAGER로 변경하지 않도록 주의
 - fetch join과 페이징을 함께 쓰면 메모리 페이징이 발생 — `@BatchSize` 또는 별도 쿼리 고려
 
-## 증거 포맷
+## 증거
 
-```json
-{
-  "id": "CMN-004",
-  "category": "backend/common",
-  "rule": "N+1 쿼리 방지",
-  "status": "PASS|FAIL|SKIP",
-  "evidence": "fetch join/@EntityGraph 사용 확인|EAGER 또는 N+1 위험 패턴 발견|연관관계 없음"
-}
-```
+개별 스킬은 증거를 직접 작성하지 않는다. 검증 결과(id, rule, status, evidence, fix_hint)를 오케스트레이터에 반환하면, `record-convention-evidence.sh`가 `convention-check.schema.json` 표준 포맷으로 통합 기록한다.

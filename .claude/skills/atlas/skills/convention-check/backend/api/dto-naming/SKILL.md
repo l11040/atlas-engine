@@ -34,15 +34,6 @@ public class CreatePointRequest { }           // record가 아닌 class
 
 네이밍은 영향 범위가 넓으므로 **경고만** 출력.
 
-## 증거 포맷
+## 증거
 
-```json
-{
-  "id": "API-004",
-  "category": "backend/api",
-  "rule": "DTO 네이밍 컨벤션",
-  "status": "PASS|FAIL",
-  "evidence": "네이밍 + record 타입 확인|패턴 불일치",
-  "file": "대상 파일 경로"
-}
-```
+개별 스킬은 증거를 직접 작성하지 않는다. 검증 결과(id, rule, status, evidence, fix_hint)를 오케스트레이터에 반환하면, `record-convention-evidence.sh`가 `convention-check.schema.json` 표준 포맷으로 통합 기록한다.

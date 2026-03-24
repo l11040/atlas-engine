@@ -42,15 +42,6 @@ public interface PointRepository extends JpaRepository<PointEntity, Long> {
 
 경고만 출력. 쿼리 리팩토링은 수동 처리.
 
-## 증거 포맷
+## 증거
 
-```json
-{
-  "id": "REP-002",
-  "category": "backend/repository",
-  "rule": "QueryDSL 분리",
-  "status": "PASS|FAIL|WARN",
-  "evidence": "QueryDSL 패턴 확인|@Query 3개 이상, 분리 권장",
-  "query_count": 5
-}
-```
+개별 스킬은 증거를 직접 작성하지 않는다. 검증 결과(id, rule, status, evidence, fix_hint)를 오케스트레이터에 반환하면, `record-convention-evidence.sh`가 `convention-check.schema.json` 표준 포맷으로 통합 기록한다.
