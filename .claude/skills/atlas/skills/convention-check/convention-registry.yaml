@@ -8,7 +8,10 @@
 backend-entity:
   path: backend/entity
   applies_to:
-    patterns: ["*Entity.java"]
+    patterns: ["*Entity.java"]        # 기본 패턴
+    fallback_detection:
+      annotation: "@Entity"            # 패턴 매칭 실패 시 @Entity 어노테이션으로 감지
+      exclude_annotation: "@Embeddable"
     excludes: ["*Embeddable.java"]
   skills:
     - id: ENT-001
@@ -63,6 +66,27 @@ backend-entity:
       name: jpa-relation
       priority: high
       auto_fix: false
+      enabled: true
+
+    - id: ENT-010
+      name: reserved-word-escape
+      priority: high
+      auto_fix: true
+      enabled: true
+
+# ─── Backend: Domain (엔티티 간 관계/공존 규칙) ───
+backend-domain:
+  path: backend/domain
+  applies_to:
+    patterns: ["*.java"]
+    path_contains: ["entity/"]
+    fallback_detection:
+      annotation: "@Entity"
+  skills:
+    - id: DOM-003
+      name: version-audited-coexistence
+      priority: critical
+      auto_fix: true
       enabled: true
 
 # ─── Backend: API ───

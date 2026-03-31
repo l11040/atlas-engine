@@ -19,37 +19,49 @@ convention-check/
 ├── scripts/
 │   └── record-convention-evidence.sh ← 증거 기록 스크립트
 ├── backend/                          ← 백엔드 컨벤션 스킬
-│   ├── entity/                       ← 엔티티 (7 스킬)
+│   ├── entity/                       ← 엔티티 (10 스킬)
 │   │   ├── base-entity/SKILL.md
-│   │   ├── optimistic-lock/SKILL.md
-│   │   ├── soft-delete/SKILL.md
-│   │   ├── audit-listener/SKILL.md
+│   │   ├── optimistic-lock/SKILL.md       ← 조건부 적용 (적응형)
+│   │   ├── soft-delete/SKILL.md           ← 적응형
+│   │   ├── audit-listener/SKILL.md        ← 적응형
 │   │   ├── protected-constructor/SKILL.md
 │   │   ├── enum-mapping/SKILL.md
-│   │   └── file-location/SKILL.md
+│   │   ├── file-location/SKILL.md         ← 적응형
+│   │   ├── unique-constraint/SKILL.md
+│   │   ├── jpa-relation/SKILL.md
+│   │   └── reserved-word-escape/SKILL.md  ← 신규
+│   ├── domain/                       ← 엔티티 간 관계/공존 (1 스킬)
+│   │   └── version-audited-coexistence/SKILL.md ← 신규 (critical)
 │   ├── api/                          ← API (5 스킬)
-│   │   ├── response-wrapper/SKILL.md
+│   │   ├── response-wrapper/SKILL.md      ← 적응형
 │   │   ├── swagger-docs/SKILL.md
 │   │   ├── global-exception/SKILL.md
-│   │   ├── dto-naming/SKILL.md
+│   │   ├── dto-naming/SKILL.md            ← 적응형
 │   │   └── controller-location/SKILL.md
 │   ├── service/                      ← 서비스 (3 스킬)
 │   │   ├── transaction-default/SKILL.md
 │   │   ├── no-interface/SKILL.md
-│   │   └── file-location/SKILL.md
+│   │   └── file-location/SKILL.md         ← 적응형
 │   ├── repository/                   ← 리포지토리 (2 스킬)
 │   │   ├── jpa-repository/SKILL.md
 │   │   └── querydsl-separation/SKILL.md
-│   ├── common/                       ← 공통 (4 스킬)
+│   ├── common/                       ← 공통 (5 스킬)
 │   │   ├── no-redis/SKILL.md
 │   │   ├── caffeine-only/SKILL.md
 │   │   ├── idempotency/SKILL.md
-│   │   └── n-plus-one/SKILL.md
-│   └── migration/                    ← 마이그레이션 (4 스킬)
-│       ├── flyway-naming/SKILL.md
-│       ├── soft-delete-column/SKILL.md
-│       ├── version-column/SKILL.md
-│       └── audit-columns/SKILL.md
+│   │   ├── n-plus-one/SKILL.md
+│   │   └── exception-consistency/SKILL.md ← 강화 (@Entity 기반 감지)
+│   ├── migration/                    ← 마이그레이션 (5 스킬)
+│   │   ├── flyway-naming/SKILL.md         ← 적응형
+│   │   ├── soft-delete-column/SKILL.md
+│   │   ├── version-column/SKILL.md
+│   │   ├── audit-columns/SKILL.md
+│   │   └── unique-index/SKILL.md
+│   └── batch/                        ← 배치 (4 스킬)
+│       ├── step-scope/SKILL.md
+│       ├── fault-tolerant/SKILL.md        ← 강화 (구체적 대안 예시)
+│       ├── n-plus-one-batch/SKILL.md
+│       └── scheduler-zone/SKILL.md
 ├── frontend/                         ← 프론트엔드 컨벤션 스킬
 │   ├── page/                         ← 페이지 (2 스킬)
 │   │   ├── metadata-export/SKILL.md
@@ -69,7 +81,7 @@ convention-check/
     └── README.md
 ```
 
-**백엔드 25개 + 프론트엔드 9개 = 총 34개 컨벤션 스킬**
+**백엔드 28개 + 프론트엔드 9개 = 총 37개 컨벤션 스킬**
 
 ## 실행 절차
 
@@ -77,35 +89,60 @@ convention-check/
 
 `convention-registry.yaml`을 읽어 전체 컨벤션 목록을 로드한다.
 
-### 2. 파일 패턴 매칭
+### 2. 파일 패턴 매칭 (적응형)
 
-Task의 files를 분석하여 해당하는 컨벤션 그룹을 활성화한다:
+Task의 files를 분석하여 해당하는 컨벤션 그룹을 활성화한다.
+
+**패턴 매칭 우선순위:**
+1. `applies_to.patterns` 글로브 매칭 (기본)
+2. 패턴 매칭 실패 시 `fallback_detection.annotation` 기반 감지
+   - 파일 내용에서 `@Entity` 등 어노테이션을 검색하여 그룹 매칭
+   - Entity 접미사를 사용하지 않는 프로젝트에서 false negative 방지
 
 ```
-Task files 예시:
-  - core/entity/point/PointEntity.java
-  - core/entity/point/PointTypeEntity.java
-  - core/service/point/PointService.java
-  - fo/domains/point/controller/PointController.java
+Task files 예시 (Entity 접미사 미사용 프로젝트):
+  - core/entity/point/PointAccount.java      ← *Entity.java 패턴 불일치
+  - core/entity/point/Grant.java             ← but @Entity 어노테이션 존재
+  - bo/domains/point/GrantService.java
+  - bo/domains/point/controller/GrantController.java
 
 → 활성화되는 그룹:
-  - backend-entity (ENT-001~007)
+  - backend-entity (ENT-001~010)   ← fallback_detection으로 매칭
+  - backend-domain (DOM-003)       ← entity/ 경로 + @Entity 감지
   - backend-service (SVC-001~003)
   - backend-api (API-001~005)
-  - backend-common (CMN-001~004) ← 모든 Java 파일에 공통
+  - backend-common (CMN-001~005)   ← 모든 Java 파일에 공통
 ```
 
-### 3. 개별 스킬 실행
+### 3. 프로젝트 패턴 감지 (적응형 스킬 전용)
+
+적응형(adaptive) 스킬은 검증 규칙을 적용하기 전에 프로젝트의 실제 패턴을 감지한다.
+이 단계는 **한 번만** 실행하고 결과를 캐싱하여 모든 적응형 스킬이 공유한다.
+
+```
+공통 감지 항목:
+1. BaseEntity 읽기 → soft-delete 패턴 + audit 메커니즘 감지
+2. 기존 엔티티 파일 스캔 → 네이밍 패턴 감지 (Entity 접미사 여부)
+3. 기존 Controller 스캔 → 응답 래퍼 패턴 감지
+4. 기존 DTO 스캔 → record/class 패턴 감지
+5. 기존 마이그레이션 스캔 → 버전 형식 감지
+6. 기존 Service 스캔 → 모듈별 배치 전략 감지
+```
+
+감지 결과는 각 적응형 스킬의 "패턴 감지" 섹션에서 활용된다.
+
+### 4. 개별 스킬 실행
 
 활성화된 그룹의 각 스킬에 대해:
 
 1. 해당 스킬의 `SKILL.md`를 읽는다 (progressive disclosure)
-2. 검증 규칙에 따라 대상 파일을 검사한다
-3. PASS/FAIL + 증거를 수집한다
-4. `priority: critical` + `auto_fix: true`인 FAIL 항목은 자동 수정을 시도한다
-5. 자동 수정 후 해당 항목만 재검증한다
+2. **적응형 스킬이면** 감지된 프로젝트 패턴을 적용한다
+3. 검증 규칙에 따라 대상 파일을 검사한다
+4. PASS/FAIL + 증거를 수집한다
+5. `priority: critical` + `auto_fix: true`인 FAIL 항목은 자동 수정을 시도한다
+6. 자동 수정 후 해당 항목만 재검증한다
 
-### 4. 증거 기록
+### 5. 증거 기록
 
 모든 스킬 실행 결과를 모아 증거를 기록한다:
 
@@ -118,7 +155,7 @@ bash scripts/record-convention-evidence.sh \
 
 증거 파일: `evidence/execute/task-{id}/convention-check.json`
 
-### 5. 결과 보고
+### 6. 결과 보고
 
 | 상황 | 다음 행동 |
 |------|----------|

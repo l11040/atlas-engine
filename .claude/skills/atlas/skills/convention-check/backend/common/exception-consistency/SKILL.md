@@ -9,7 +9,9 @@ description: >
 # exception-consistency — 예외 타입 일관성 검증
 
 ## 검증 대상
-`*Service.java`, `*Entity.java` 파일
+`*Service.java` 파일 + `@Entity` 어노테이션이 있는 모든 `.java` 파일
+
+**주의**: Entity 접미사(`*Entity.java`)에 의존하지 않는다. `@Entity` 어노테이션으로 엔티티를 식별한다.
 
 ## 검증 규칙
 
@@ -46,11 +48,26 @@ public void mature() {
 1. `IllegalStateException` → `DomainException` 변환
 2. 메시지 문자열 → ResponseStatus enum 매핑 필요 (수동 판단)
 
+## 추가 검증: 에러코드 존재 확인
+
+DomainException에 전달하는 ResponseStatus enum에 필요한 에러코드가 존재하는지도 확인한다:
+
+```java
+// PASS — 에러코드가 enum에 존재
+throw new DomainException(DomainBaseResponseStatus.GRANT_NOT_FOUND);
+// DomainBaseResponseStatus에 GRANT_NOT_FOUND가 정의되어 있음
+
+// WARN — 에러코드 부재 (컴파일 에러이므로 높은 우선순위)
+throw new DomainException(DomainBaseResponseStatus.POINT_LIMIT_EXCEEDED);
+// DomainBaseResponseStatus에 POINT_LIMIT_EXCEEDED가 없음
+```
+
 ## Gotchas
 
 - 프로젝트마다 예외 클래스명이 다름 (DomainException, BaseException, BusinessException 등). conventions.json 참조
 - 엔티티에서 DomainException을 쓰려면 core 모듈에 해당 클래스가 있어야 함
 - v0.4.0/v0.4.2에서 달성, v0.4.3에서 엔티티만 IllegalState로 퇴행한 반복 패턴
+- `@Entity` 어노테이션으로 엔티티를 식별해야 함 — `*Entity.java` 파일명 패턴에 의존하면 접미사 미사용 프로젝트에서 검증 누락 발생
 
 ## 증거
 
