@@ -1,3 +1,74 @@
 {
-  "hooks": {}
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/session-init.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/completion-gate.sh"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/skill-pre.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/skill-post.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/agent-start.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/agent-stop.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
 }

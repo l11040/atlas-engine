@@ -1,0 +1,64 @@
+{
+  "profile_rules": [
+    {
+      "profile": "entity",
+      "priority": 1,
+      "match": {
+        "issuetype_contains": ["엔티티"],
+        "labels": ["entity"],
+        "sections_contains": ["Entity Schemas", "Entity Context"]
+      },
+      "required_sections": ["Acceptance Criteria", "Entity Schemas|Entity Context"],
+      "optional_sections": ["FK Matrix", "API Spec"]
+    },
+    {
+      "profile": "api",
+      "priority": 2,
+      "match": {
+        "issuetype_contains": ["API"],
+        "labels": ["api"],
+        "sections_contains": ["API Spec"]
+      },
+      "required_sections": ["Acceptance Criteria", "API Spec"],
+      "optional_sections": ["Entity Schemas|Entity Context"]
+    },
+    {
+      "profile": "batch",
+      "priority": 3,
+      "match": {
+        "labels": ["batch"],
+        "summary_contains": ["배치", "스케줄", "Batch"],
+        "sections_contains": ["Batch"]
+      },
+      "required_sections": ["Acceptance Criteria", "Batch|Key-Value"],
+      "optional_sections": []
+    },
+    {
+      "profile": "test",
+      "priority": 4,
+      "match": {
+        "issuetype": "하위 작업",
+        "labels": ["test"]
+      },
+      "required_sections": ["Acceptance Criteria"],
+      "optional_sections": ["Test Scenarios"]
+    },
+    {
+      "profile": "refactor",
+      "priority": 5,
+      "match": {
+        "labels": ["refactor"],
+        "summary_contains": ["리팩터링", "리팩토링", "refactor"]
+      },
+      "required_sections": ["Acceptance Criteria"],
+      "optional_sections": []
+    },
+    {
+      "profile": "default",
+      "priority": 99,
+      "match": {},
+      "required_sections": ["Acceptance Criteria"],
+      "optional_sections": []
+    }
+  ]
+}
