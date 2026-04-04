@@ -1,8 +1,8 @@
 import { app, BrowserWindow } from "electron";
-import { registerAutomationIpc } from "./ipc/register-automation-ipc";
 import { registerCliIpc } from "./ipc/register-cli-ipc";
 import { registerConfigIpc } from "./ipc/register-config-ipc";
-import { registerJiraIpc } from "./ipc/register-jira-ipc";
+import { registerLogIpc } from "./ipc/register-log-ipc";
+import { registerPipelineIpc } from "./ipc/register-pipeline-ipc";
 import { loadSettings } from "./services/config/settings";
 import { closeAppDatabase } from "./services/storage/sqlite-db";
 import { createMainWindow } from "./window/create-main-window";
@@ -21,8 +21,8 @@ app.whenReady().then(async () => {
 
   registerConfigIpc();
   registerCliIpc();
-  registerJiraIpc();
-  registerAutomationIpc();
+  registerLogIpc();
+  registerPipelineIpc();
   createMainWindow();
 
   app.on("activate", () => {

@@ -80,6 +80,25 @@
   --color-tool-search: #6366f1;
   --color-tool-default: #71717a;
 
+  /* Design Tokens - Node Status */
+  --color-node-pending-bg: #f4f4f5;
+  --color-node-pending-border: #d4d4d8;
+  --color-node-running-bg: #dbeafe;
+  --color-node-running-border: #3b82f6;
+  --color-node-completed-bg: #dcfce7;
+  --color-node-completed-border: #10b981;
+  --color-node-failed-bg: #fee2e2;
+  --color-node-failed-border: #f43f5e;
+  --color-node-group-bg: #fafafa;
+
+  /* Design Tokens - Timeline (Cascade Gantt) */
+  --color-timeline-bar-agent: #3b82f6;
+  --color-timeline-bar-skill: #93c5fd;
+  --color-timeline-bar-running: #60a5fa;
+  --color-timeline-bar-failed: #f43f5e;
+  --color-timeline-bar-pending: #e4e4e7;
+  --color-timeline-track: #f4f4f5;
+
   /* Design Tokens - Typography */
   --font-family-sans:
     "Pretendard Variable", "Pretendard", "SUIT Variable", "SUIT", "Noto Sans KR",

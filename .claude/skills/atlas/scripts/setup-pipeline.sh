@@ -34,19 +34,6 @@ log_info "Run dir: ${RUN_DIR}"
 # --- run_dir 생성 ---
 mkdir -p "${EVIDENCE_DIR}"
 mkdir -p "${RUN_DIR}/tasks"
-mkdir -p "${RUN_DIR}/logs"
-
-# --- 로그 유틸 ---
-LOG_FILE="${RUN_DIR}/logs/pipeline.jsonl"
-
-append_log() {
-  local event="$1"
-  local extra="$2"
-  echo "$extra" | jq -c --arg e "$event" --arg ts "$(timestamp)" \
-    '. + {event: $e, timestamp: $ts}' >> "$LOG_FILE"
-}
-
-append_log "phase_start" "$(jq -n --arg p "setup" --arg tk "$TICKET_KEY" '{phase: $p, ticket_key: $tk}')"
 
 # --- 리프 티켓 수집 (subtask가 없는 티켓) ---
 collect_leaf_tickets() {
@@ -218,16 +205,6 @@ SUMMARY=$(jq -n \
   }')
 
 write_evidence "${RUN_DIR}/setup-summary.json" "$SUMMARY"
-
-# --- 로그: Gate 0 결과 + 단계 완료 ---
-append_log "gate_result" "$(jq -n \
-  --arg p "setup" --arg g "gate0" --arg s "$SETUP_STATUS" \
-  --argjson total "$TOTAL_TICKETS" --argjson pass "$PASS_COUNT" --argjson fail "$FAIL_COUNT" \
-  '{phase: $p, gate: $g, status: $s, total: $total, pass: $pass, fail: $fail}')"
-
-append_log "phase_complete" "$(jq -n \
-  --arg p "setup" --arg s "$SETUP_STATUS" --arg rd "$RUN_DIR" \
-  '{phase: $p, status: $s, run_dir: $rd}')"
 
 # --- 결과 출력 ---
 echo ""

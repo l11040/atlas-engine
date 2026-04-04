@@ -13,18 +13,10 @@ import {
   type CliRunResponse,
   type GitDiffRequest,
   type GitDiffResponse,
-  type JiraFetchTicketTreeRequest,
-  type JiraFetchTicketTreeResponse,
-  type JiraProgressEvent,
-  type JiraTestConnectionRequest,
-  type JiraTestConnectionResponse,
-  type JiraTicketTree,
-  type RunCancelRequest,
-  type RunStartRequest,
-  type RunStartResponse,
-  type RunState,
-  type TaskApprovalRequest,
-  type TaskExecutionState
+  type HookLogEntry,
+  type LogQueryRequest,
+  type PipelineDefinition,
+  type SessionSummary
 } from "../shared/ipc";
 
 const api: AtlasDesktopApi = {
@@ -49,31 +41,6 @@ const api: AtlasDesktopApi = {
       ipcRenderer.removeListener(IPC_CHANNELS.cliEvent, wrapped);
     };
   },
-  // 자동화 파이프라인
-  startRun(request: RunStartRequest): Promise<RunStartResponse> {
-    return ipcRenderer.invoke(IPC_CHANNELS.runStart, request);
-  },
-  cancelRun(request: RunCancelRequest): Promise<void> {
-    return ipcRenderer.invoke(IPC_CHANNELS.runCancel, request);
-  },
-  getRunState(): Promise<RunState | null> {
-    return ipcRenderer.invoke(IPC_CHANNELS.runGetState);
-  },
-  resetRun(): Promise<void> {
-    return ipcRenderer.invoke(IPC_CHANNELS.runReset);
-  },
-  getTaskState(taskId: string): Promise<TaskExecutionState | null> {
-    return ipcRenderer.invoke(IPC_CHANNELS.taskGetState, taskId);
-  },
-  getAllTaskStates(): Promise<Record<string, TaskExecutionState>> {
-    return ipcRenderer.invoke(IPC_CHANNELS.taskGetAllStates);
-  },
-  cancelTask(taskId: string): Promise<void> {
-    return ipcRenderer.invoke(IPC_CHANNELS.taskCancel, taskId);
-  },
-  approveTask(request: TaskApprovalRequest): Promise<void> {
-    return ipcRenderer.invoke(IPC_CHANNELS.taskApprove, request);
-  },
   // 설정
   getConfig(): Promise<AppSettings> {
     return ipcRenderer.invoke(IPC_CHANNELS.configGet);
@@ -81,27 +48,40 @@ const api: AtlasDesktopApi = {
   updateConfig(request: AppSettingsUpdateRequest): Promise<AppSettings> {
     return ipcRenderer.invoke(IPC_CHANNELS.configUpdate, request);
   },
-  // Jira
-  testJiraConnection(request: JiraTestConnectionRequest): Promise<JiraTestConnectionResponse> {
-    return ipcRenderer.invoke(IPC_CHANNELS.jiraTestConnection, request);
+  // 로그
+  startLogWatcher(cwd: string): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.logWatcherStart, cwd);
   },
-  fetchJiraTicketTree(request: JiraFetchTicketTreeRequest): Promise<JiraFetchTicketTreeResponse> {
-    return ipcRenderer.invoke(IPC_CHANNELS.jiraFetchTicketTree, request);
+  stopLogWatcher(): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.logWatcherStop);
   },
-  getJiraTicketTree(rootKey: string): Promise<JiraTicketTree | null> {
-    return ipcRenderer.invoke(IPC_CHANNELS.jiraGetTicketTree, rootKey);
+  queryLogs(request: LogQueryRequest): Promise<HookLogEntry[]> {
+    return ipcRenderer.invoke(IPC_CHANNELS.logQuery, request);
   },
-  getAllJiraTicketTrees(): Promise<JiraTicketTree[]> {
-    return ipcRenderer.invoke(IPC_CHANNELS.jiraGetAllTicketTrees);
+  querySessions(): Promise<SessionSummary[]> {
+    return ipcRenderer.invoke(IPC_CHANNELS.logQuery, { type: "sessions" });
   },
-  onJiraProgress(listener: (event: JiraProgressEvent) => void) {
-    const wrapped = (_event: Electron.IpcRendererEvent, payload: JiraProgressEvent) => {
+  onLogNewEntries(listener: (entries: HookLogEntry[]) => void) {
+    const wrapped = (_event: Electron.IpcRendererEvent, payload: HookLogEntry[]) => {
       listener(payload);
     };
-    ipcRenderer.on(IPC_CHANNELS.jiraProgress, wrapped);
+    ipcRenderer.on(IPC_CHANNELS.logNewEntries, wrapped);
     return () => {
-      ipcRenderer.removeListener(IPC_CHANNELS.jiraProgress, wrapped);
+      ipcRenderer.removeListener(IPC_CHANNELS.logNewEntries, wrapped);
     };
+  },
+  // 파이프라인
+  getPipeline(id: string): Promise<PipelineDefinition | null> {
+    return ipcRenderer.invoke(IPC_CHANNELS.pipelineGet, id);
+  },
+  savePipeline(definition: PipelineDefinition): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.pipelineSave, definition);
+  },
+  importPipeline(): Promise<PipelineDefinition | null> {
+    return ipcRenderer.invoke(IPC_CHANNELS.pipelineImport);
+  },
+  listPipelines(): Promise<Array<{ id: string; name: string }>> {
+    return ipcRenderer.invoke(IPC_CHANNELS.pipelineList);
   }
 };
 

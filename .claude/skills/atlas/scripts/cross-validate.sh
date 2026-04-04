@@ -1,11 +1,13 @@
 #!/bin/bash
 # cross-validate.sh — Gate E-post: 태스크/커밋/검증 파일 체인 교차 검증
 #
-# Usage: cross-validate.sh <task.json> [output-dir] [project-root]
+# Usage:
+#   cross-validate.sh <task.json> [output-dir] [project-root]
+#   cross-validate.sh <task-id> <run-dir> [project-root]
 #
 # 검증:
 #   1. task_files: task-{id}.json의 files[]
-#   2. committed_files: 최근 커밋에 포함된 파일
+#   2. committed_files: commit.json의 커밋 또는 파일별 최근 커밋 이력 기반 파일
 #   3. checked_files: convention-check.json + validate.json에서 검사한 파일
 #   4. task_files ⊆ committed_files
 #   5. committed_files ⊆ checked_files
@@ -20,9 +22,17 @@ source "${SCRIPT_DIR}/lib/common.sh"
 require_jq
 
 # --- 인자 파싱 ---
-TASK_JSON="${1:?Usage: cross-validate.sh <task.json> [output-dir] [project-root]}"
-OUTPUT_DIR="${2:-.}"
-PROJECT_ROOT="${3:-.}"
+if [ "$#" -ge 2 ] && [ ! -f "$1" ] && [ -d "$2" ] && [ -f "${2}/tasks/${1}.json" ]; then
+  TASK_ID_INPUT="$1"
+  RUN_DIR="$2"
+  TASK_JSON="${RUN_DIR}/tasks/${TASK_ID_INPUT}.json"
+  OUTPUT_DIR="${RUN_DIR}/evidence/${TASK_ID_INPUT}"
+  PROJECT_ROOT="${3:-.}"
+else
+  TASK_JSON="${1:?Usage: cross-validate.sh <task.json> [output-dir] [project-root]}"
+  OUTPUT_DIR="${2:-.}"
+  PROJECT_ROOT="${3:-.}"
+fi
 
 if ! validate_json_file "$TASK_JSON" "task.json"; then
   exit 2
@@ -36,18 +46,37 @@ mkdir -p "$OUTPUT_DIR"
 # --- 1. task_files 수집 ---
 TASK_FILES=$(jq -r '.files // [] | .[]' "$TASK_JSON" | sort)
 
-# --- 2. committed_files 수집 (최근 커밋) ---
+# --- 2. committed_files 수집 ---
 cd "$PROJECT_ROOT"
-COMMITTED_FILES=$(git diff-tree --no-commit-id --name-only -r HEAD 2>/dev/null | sort || true)
+COMMIT_EVIDENCE="${OUTPUT_DIR}/commit.json"
+COMMIT_SHA=""
+VERIFICATION_MODE="per_file_commit_history"
+
+if [ -f "$COMMIT_EVIDENCE" ]; then
+  COMMIT_SHA=$(jq -r '.commit_sha // ""' "$COMMIT_EVIDENCE" 2>/dev/null || echo "")
+fi
+
+if [ -n "$COMMIT_SHA" ]; then
+  COMMITTED_FILES=$(git diff-tree --root --no-commit-id --name-only -r "$COMMIT_SHA" 2>/dev/null | sort || true)
+  VERIFICATION_MODE="commit_evidence"
+else
+  COMMITTED_FILES=""
+  while IFS= read -r tf; do
+    [ -z "$tf" ] && continue
+    if git log --format='%H' -- "$tf" | head -1 | grep -q .; then
+      COMMITTED_FILES="${COMMITTED_FILES}${tf}"$'\n'
+    fi
+  done <<< "$TASK_FILES"
+  COMMITTED_FILES=$(echo "$COMMITTED_FILES" | sort -u)
+fi
 
 # --- 3. checked_files 수집 ---
 CHECKED_FILES=""
-# validate.json의 검사 대상 = task files (E-1에서 검사)
 if [ -f "${OUTPUT_DIR}/validate.json" ]; then
-  VALIDATE_CHECKED=$(jq -r '.task_id // ""' "${OUTPUT_DIR}/validate.json")
-  if [ -n "$VALIDATE_CHECKED" ]; then
-    CHECKED_FILES=$(jq -r '.files // [] | .[]' "$TASK_JSON" | sort)
-  fi
+  CHECKED_FILES=$(jq -r '.files_checked // [] | .[]' "${OUTPUT_DIR}/validate.json" 2>/dev/null | sort || true)
+fi
+if [ -z "$CHECKED_FILES" ]; then
+  CHECKED_FILES=$(jq -r '.files // [] | .[]' "$TASK_JSON" | sort)
 fi
 
 # --- 4. task_files ⊆ committed_files ---
@@ -96,6 +125,8 @@ EVIDENCE=$(jq -n \
   --arg ts "$(timestamp)" \
   --arg status "$FINAL_STATUS" \
   --arg task_id "$TASK_ID" \
+  --arg verification_mode "$VERIFICATION_MODE" \
+  --arg resolved_commit_sha "$COMMIT_SHA" \
   --argjson task_files "$TASK_FILES_JSON" \
   --argjson committed_files "$COMMITTED_JSON" \
   --argjson checked_files "$CHECKED_JSON" \
@@ -107,6 +138,8 @@ EVIDENCE=$(jq -n \
     timestamp: $ts,
     status: $status,
     task_id: $task_id,
+    verification_mode: $verification_mode,
+    resolved_commit_sha: (if $resolved_commit_sha == "" then null else $resolved_commit_sha end),
     chains: {
       task_files: $task_files,
       committed_files: $committed_files,

@@ -2,63 +2,30 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useHeaderLeft } from "@/components/app-layout";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAppSettings } from "@/hooks/use-app-settings";
 import { cn } from "@/lib/utils";
 import type { CliPermissionMode, ProviderType } from "@shared/ipc";
 
-type SettingsTab = "general" | "cli" | "jira" | "tracing";
+type SettingsTab = "general" | "cli";
 
 const TABS: { key: SettingsTab; label: string }[] = [
   { key: "general", label: "일반" },
-  { key: "cli", label: "CLI" },
-  { key: "jira", label: "Jira" },
-  { key: "tracing", label: "추적" }
+  { key: "cli", label: "CLI" }
 ];
 
 export default function SettingsPage() {
   const navigate = useNavigate();
-  const setHeaderLeft = useHeaderLeft();
   const { settings, loading, saveConfig } = useAppSettings();
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
-
-  // 목적: 헤더 좌측에 뒤로가기 + 타이틀을 표시한다.
-  useEffect(() => {
-    setHeaderLeft(
-      <>
-        <button
-          onClick={() => navigate("/")}
-          className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:text-text-strong"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-        <span className="text-sm font-semibold text-text-strong">설정</span>
-      </>
-    );
-    return () => setHeaderLeft(null);
-  }, [setHeaderLeft, navigate]);
 
   const [defaultCwd, setDefaultCwd] = useState("");
   const [activeProvider, setActiveProvider] = useState<ProviderType>("claude");
   const [timeoutSec, setTimeoutSec] = useState(300);
   const [permissionMode, setPermissionMode] = useState<CliPermissionMode>("auto");
   const [saving, setSaving] = useState(false);
-  const [jiraBaseUrl, setJiraBaseUrl] = useState("");
-  const [jiraEmail, setJiraEmail] = useState("");
-  const [jiraApiToken, setJiraApiToken] = useState("");
-  const [jiraProjectPrefix, setJiraProjectPrefix] = useState("");
-  const [jiraTokenVisible, setJiraTokenVisible] = useState(false);
-  const [jiraTesting, setJiraTesting] = useState(false);
-  const [jiraTestResult, setJiraTestResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [tracingEnabled, setTracingEnabled] = useState(false);
-  const [tracingApiKey, setTracingApiKey] = useState("");
-  const [tracingProject, setTracingProject] = useState("atlas-engine");
-  const [tracingEndpoint, setTracingEndpoint] = useState("https://api.smith.langchain.com");
-  const [apiKeyVisible, setApiKeyVisible] = useState(false);
 
   // 목적: 설정이 로드되면 폼 state에 동기화한다.
   useEffect(() => {
@@ -67,74 +34,38 @@ export default function SettingsPage() {
       setActiveProvider(settings.activeProvider);
       setTimeoutSec(Math.round(settings.cli.timeoutMs / 1000));
       setPermissionMode(settings.cli.permissionMode);
-      if (settings.jira) {
-        setJiraBaseUrl(settings.jira.baseUrl);
-        setJiraEmail(settings.jira.email);
-        setJiraApiToken(settings.jira.apiToken);
-        setJiraProjectPrefix(settings.jira.projectPrefix ?? "");
-      }
-      if (settings.tracing) {
-        setTracingEnabled(settings.tracing.enabled);
-        setTracingApiKey(settings.tracing.apiKey);
-        setTracingProject(settings.tracing.project);
-        setTracingEndpoint(settings.tracing.endpoint);
-      }
     }
   }, [settings]);
 
   async function handleSave() {
     setSaving(true);
     try {
-      const base: Record<string, unknown> = {
+      await saveConfig({
         defaultCwd,
         activeProvider,
         cli: {
           timeoutMs: timeoutSec * 1000,
           permissionMode
-        },
-        jira: jiraBaseUrl ? {
-          baseUrl: jiraBaseUrl,
-          email: jiraEmail,
-          apiToken: jiraApiToken,
-          projectPrefix: jiraProjectPrefix.toUpperCase().replace(/-$/, "")
-        } : undefined,
-        tracing: {
-          enabled: tracingEnabled,
-          apiKey: tracingApiKey,
-          project: tracingProject,
-          endpoint: tracingEndpoint
         }
-      };
-
-      await saveConfig(base);
+      });
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleTestJira() {
-    if (!jiraBaseUrl || !jiraEmail || !jiraApiToken) {
-      setJiraTestResult({ success: false, message: "모든 필드를 입력하세요" });
-      return;
-    }
-    setJiraTesting(true);
-    setJiraTestResult(null);
-    try {
-      const result = await window.atlas.testJiraConnection({
-        baseUrl: jiraBaseUrl,
-        email: jiraEmail,
-        apiToken: jiraApiToken
-      });
-      setJiraTestResult(result);
-    } catch {
-      setJiraTestResult({ success: false, message: "연결 테스트 실패" });
-    } finally {
-      setJiraTesting(false);
-    }
-  }
-
   return (
-    <div className="flex flex-col gap-4">
+    <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-4 p-4">
+      {/* 헤더 */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => navigate("/")}
+          className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:text-text-strong"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </button>
+        <span className="text-sm font-semibold text-text-strong">설정</span>
+      </div>
+
       {loading ? (
         <div className="flex items-center justify-center py-16 text-xs text-text-soft">설정 로드 중...</div>
       ) : (
@@ -247,187 +178,6 @@ export default function SettingsPage() {
                       자동 승인: 모든 도구 권한을 자동 승인합니다.
                       <br />
                       수동 확인: 실행 전 사용자 확인을 요청합니다.
-                    </p>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {activeTab === "jira" && (
-              <>
-                <div className="flex items-center">
-                  <h2 className="text-xs font-semibold text-text-strong">Jira 연결</h2>
-                  <div className="ml-auto flex gap-2">
-                    <Button onClick={handleTestJira} disabled={jiraTesting} variant="outline" size="sm" className="h-7 text-xs">
-                      {jiraTesting ? "테스트 중..." : "연결 테스트"}
-                    </Button>
-                    <Button onClick={handleSave} disabled={saving} size="sm" className="h-7 text-xs">
-                      {saving ? "저장 중..." : "저장"}
-                    </Button>
-                  </div>
-                </div>
-
-                {jiraTestResult && (
-                  <div className={cn(
-                    "rounded-md border px-3 py-2 text-xs",
-                    jiraTestResult.success
-                      ? "border-status-success/30 bg-status-success/10 text-status-success"
-                      : "border-status-danger/30 bg-status-danger/10 text-status-danger"
-                  )}>
-                    {jiraTestResult.message}
-                  </div>
-                )}
-
-                <div className="flex flex-col gap-4">
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="jiraBaseUrl" className="text-xs font-semibold text-text-muted">
-                      Base URL
-                    </Label>
-                    <Input
-                      id="jiraBaseUrl"
-                      value={jiraBaseUrl}
-                      onChange={(e) => setJiraBaseUrl(e.target.value)}
-                      placeholder="https://your-domain.atlassian.net"
-                      className="h-8 border-border-subtle bg-surface-subtle text-xs text-text-strong placeholder:text-text-soft"
-                    />
-                    <p className="text-2xs text-text-soft">Jira Cloud 인스턴스의 URL입니다.</p>
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="jiraEmail" className="text-xs font-semibold text-text-muted">
-                      이메일
-                    </Label>
-                    <Input
-                      id="jiraEmail"
-                      type="email"
-                      value={jiraEmail}
-                      onChange={(e) => setJiraEmail(e.target.value)}
-                      placeholder="user@example.com"
-                      className="h-8 border-border-subtle bg-surface-subtle text-xs text-text-strong placeholder:text-text-soft"
-                    />
-                    <p className="text-2xs text-text-soft">Jira 계정 이메일입니다.</p>
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="jiraApiToken" className="text-xs font-semibold text-text-muted">
-                      API Token
-                    </Label>
-                    <div className="relative">
-                      <Input
-                        id="jiraApiToken"
-                        type={jiraTokenVisible ? "text" : "password"}
-                        value={jiraApiToken}
-                        onChange={(e) => setJiraApiToken(e.target.value)}
-                        placeholder="Atlassian API 토큰"
-                        className="h-8 border-border-subtle bg-surface-subtle pr-16 font-mono text-xs text-text-strong placeholder:text-text-soft"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setJiraTokenVisible(!jiraTokenVisible)}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-2xs text-text-soft hover:text-text-muted"
-                      >
-                        {jiraTokenVisible ? "숨기기" : "보기"}
-                      </button>
-                    </div>
-                    <p className="text-2xs text-text-soft">
-                      Atlassian 계정 설정에서 생성한 API 토큰입니다.
-                    </p>
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="jiraProjectPrefix" className="text-xs font-semibold text-text-muted">
-                      프로젝트 키
-                    </Label>
-                    <Input
-                      id="jiraProjectPrefix"
-                      value={jiraProjectPrefix}
-                      onChange={(e) => setJiraProjectPrefix(e.target.value)}
-                      placeholder="GRID"
-                      className="h-8 w-32 border-border-subtle bg-surface-subtle text-xs uppercase text-text-strong placeholder:text-text-soft"
-                    />
-                    <p className="text-2xs text-text-soft">
-                      설정하면 홈에서 번호만 입력해도 자동으로 프리픽스를 붙입니다. (예: 2 → GRID-2)
-                    </p>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {activeTab === "tracing" && (
-              <>
-                <div className="flex items-center">
-                  <h2 className="text-xs font-semibold text-text-strong">추적</h2>
-                  <Button onClick={handleSave} disabled={saving} size="sm" className="ml-auto h-7 text-xs">
-                    {saving ? "저장 중..." : "저장"}
-                  </Button>
-                </div>
-                <div className="flex flex-col gap-4">
-                  <div className="flex items-center gap-3">
-                    <Label htmlFor="tracingEnabled" className="text-xs font-semibold text-text-muted">
-                      LangSmith 추적
-                    </Label>
-                    <Switch id="tracingEnabled" checked={tracingEnabled} onCheckedChange={setTracingEnabled} />
-                  </div>
-                  <p className="text-2xs text-text-soft">
-                    활성화하면 LangGraph 실행 추적이 LangSmith로 전송됩니다.
-                  </p>
-
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="tracingApiKey" className="text-xs font-semibold text-text-muted">
-                      API Key
-                    </Label>
-                    <div className="relative">
-                      <Input
-                        id="tracingApiKey"
-                        type={apiKeyVisible ? "text" : "password"}
-                        value={tracingApiKey}
-                        onChange={(e) => setTracingApiKey(e.target.value)}
-                        placeholder="lsv2_pt_..."
-                        disabled={!tracingEnabled}
-                        className="h-8 border-border-subtle bg-surface-subtle pr-16 font-mono text-xs text-text-strong placeholder:text-text-soft"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setApiKeyVisible(!apiKeyVisible)}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-2xs text-text-soft hover:text-text-muted"
-                      >
-                        {apiKeyVisible ? "숨기기" : "보기"}
-                      </button>
-                    </div>
-                    <p className="text-2xs text-text-soft">
-                      LangSmith API 키입니다. 비워두면 시스템 환경 변수(LANGCHAIN_API_KEY)를 사용합니다.
-                    </p>
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="tracingProject" className="text-xs font-semibold text-text-muted">
-                      프로젝트
-                    </Label>
-                    <Input
-                      id="tracingProject"
-                      value={tracingProject}
-                      onChange={(e) => setTracingProject(e.target.value)}
-                      placeholder="atlas-engine"
-                      disabled={!tracingEnabled}
-                      className="h-8 w-64 border-border-subtle bg-surface-subtle text-xs text-text-strong placeholder:text-text-soft"
-                    />
-                    <p className="text-2xs text-text-soft">LangSmith 프로젝트 이름입니다.</p>
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="tracingEndpoint" className="text-xs font-semibold text-text-muted">
-                      엔드포인트
-                    </Label>
-                    <Input
-                      id="tracingEndpoint"
-                      value={tracingEndpoint}
-                      onChange={(e) => setTracingEndpoint(e.target.value)}
-                      placeholder="https://api.smith.langchain.com"
-                      disabled={!tracingEnabled}
-                      className="h-8 border-border-subtle bg-surface-subtle text-xs text-text-strong placeholder:text-text-soft"
-                    />
-                    <p className="text-2xs text-text-soft">
-                      자체 호스팅(Self-hosted) LangSmith를 사용하는 경우에만 변경하세요.
                     </p>
                   </div>
                 </div>

@@ -10,12 +10,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   cli: {
     timeoutMs: 300_000,
     permissionMode: "auto"
-  },
-  tracing: {
-    enabled: false,
-    apiKey: "",
-    project: "atlas-engine",
-    endpoint: "https://api.smith.langchain.com"
   }
 };
 
@@ -25,15 +19,7 @@ function cloneDefaultSettings(): AppSettings {
   return {
     defaultCwd: DEFAULT_SETTINGS.defaultCwd,
     activeProvider: DEFAULT_SETTINGS.activeProvider,
-    cli: { ...DEFAULT_SETTINGS.cli },
-    tracing: DEFAULT_SETTINGS.tracing
-      ? { ...DEFAULT_SETTINGS.tracing }
-      : {
-          enabled: false,
-          apiKey: "",
-          project: "atlas-engine",
-          endpoint: "https://api.smith.langchain.com"
-        }
+    cli: { ...DEFAULT_SETTINGS.cli }
   };
 }
 

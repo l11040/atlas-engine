@@ -1,7 +1,9 @@
 #!/bin/bash
 # convention-check.sh — Gate E-pre: 컨벤션 스킬 적용 검증
 #
-# Usage: convention-check.sh <task.json> <evidence-dir> [project-root]
+# Usage:
+#   convention-check.sh <task.json> <evidence-dir> [project-root]
+#   convention-check.sh <task-id> <run-dir> [project-root]
 #
 # skill-manifest.json과 required-skills.json을 기반으로:
 #   1. manifest에 선택된 스킬 읽기
@@ -19,9 +21,17 @@ source "${SCRIPT_DIR}/lib/common.sh"
 require_jq
 
 # --- 인자 파싱 ---
-TASK_JSON="${1:?Usage: convention-check.sh <task.json> <evidence-dir> [project-root]}"
-EVIDENCE_DIR="${2:?Usage: convention-check.sh <task.json> <evidence-dir> [project-root]}"
-PROJECT_ROOT="${3:-.}"
+if [ "$#" -ge 2 ] && [ ! -f "$1" ] && [ -d "$2" ] && [ -f "${2}/tasks/${1}.json" ]; then
+  TASK_ID="$1"
+  RUN_DIR="$2"
+  TASK_JSON="${RUN_DIR}/tasks/${TASK_ID}.json"
+  EVIDENCE_DIR="${RUN_DIR}/evidence/${TASK_ID}"
+  PROJECT_ROOT="${3:-.}"
+else
+  TASK_JSON="${1:?Usage: convention-check.sh <task.json> <evidence-dir> [project-root]}"
+  EVIDENCE_DIR="${2:?Usage: convention-check.sh <task.json> <evidence-dir> [project-root]}"
+  PROJECT_ROOT="${3:-.}"
+fi
 
 if ! validate_json_file "$TASK_JSON" "task.json"; then
   exit 2

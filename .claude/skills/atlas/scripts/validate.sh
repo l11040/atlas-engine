@@ -1,7 +1,9 @@
 #!/bin/bash
 # validate.sh — Gate E-pre: 빌드/린트/스코프 검증
 #
-# Usage: validate.sh <task.json> [output-dir] [project-root]
+# Usage:
+#   validate.sh <task.json> [output-dir] [project-root]
+#   validate.sh <task-id> <run-dir> [project-root]
 #
 # 서브게이트:
 #   E-1: scope   — files[]가 실제 존재하는지
@@ -19,9 +21,17 @@ source "${SCRIPT_DIR}/lib/common.sh"
 require_jq
 
 # --- 인자 파싱 ---
-TASK_JSON="${1:?Usage: validate.sh <task.json> [output-dir] [project-root]}"
-OUTPUT_DIR="${2:-.}"
-PROJECT_ROOT="${3:-.}"
+if [ "$#" -ge 2 ] && [ ! -f "$1" ] && [ -d "$2" ] && [ -f "${2}/tasks/${1}.json" ]; then
+  TASK_ID="$1"
+  RUN_DIR="$2"
+  TASK_JSON="${RUN_DIR}/tasks/${TASK_ID}.json"
+  OUTPUT_DIR="${RUN_DIR}/evidence/${TASK_ID}"
+  PROJECT_ROOT="${3:-.}"
+else
+  TASK_JSON="${1:?Usage: validate.sh <task.json> [output-dir] [project-root]}"
+  OUTPUT_DIR="${2:-.}"
+  PROJECT_ROOT="${3:-.}"
+fi
 
 if ! validate_json_file "$TASK_JSON" "task.json"; then
   exit 2
@@ -180,6 +190,7 @@ EVIDENCE=$(jq -n \
   --arg ts "$(timestamp)" \
   --arg status "$FINAL_STATUS" \
   --arg task_id "$TASK_ID" \
+  --argjson files_checked "$FILES_JSON" \
   --arg e1_status "$E1_STATUS" \
   --argjson e1_missing "$E1_MISSING" \
   --arg e2_status "$E2_STATUS" \
@@ -194,6 +205,7 @@ EVIDENCE=$(jq -n \
     timestamp: $ts,
     status: $status,
     task_id: $task_id,
+    files_checked: $files_checked,
     sub_gates: {
       E1_scope: { status: $e1_status, missing_files: $e1_missing },
       E2_build: { status: $e2_status, output: $e2_output },

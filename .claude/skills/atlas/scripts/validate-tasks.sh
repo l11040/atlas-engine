@@ -1,7 +1,9 @@
 #!/bin/bash
 # validate-tasks.sh — Gate A: task-{id}.json 유효성 검증
 #
-# Usage: validate-tasks.sh <source.json> <tasks-dir> [output-dir]
+# Usage:
+#   validate-tasks.sh <source.json> <tasks-dir> [output-dir]
+#   validate-tasks.sh <run-dir>
 #
 # 4개 서브게이트를 순차 검증한다:
 #   A-1: 스키마 — acceptance_criteria, files, depends_on 존재
@@ -19,9 +21,16 @@ source "${SCRIPT_DIR}/lib/common.sh"
 require_jq
 
 # --- 인자 파싱 ---
-SOURCE_JSON="${1:?Usage: validate-tasks.sh <source.json> <tasks-dir> [output-dir]}"
-TASKS_DIR="${2:?Usage: validate-tasks.sh <source.json> <tasks-dir> [output-dir]}"
-OUTPUT_DIR="${3:-.}"
+if [ "$#" -eq 1 ] && [ -d "$1" ]; then
+  RUN_DIR="$1"
+  SOURCE_JSON="${RUN_DIR}/evidence/analyze/ticket-read.json"
+  TASKS_DIR="${RUN_DIR}/tasks"
+  OUTPUT_DIR="${RUN_DIR}/evidence/analyze"
+else
+  SOURCE_JSON="${1:?Usage: validate-tasks.sh <source.json> <tasks-dir> [output-dir]}"
+  TASKS_DIR="${2:?Usage: validate-tasks.sh <source.json> <tasks-dir> [output-dir]}"
+  OUTPUT_DIR="${3:-.}"
+fi
 
 if ! validate_json_file "$SOURCE_JSON" "source.json"; then
   exit 2

@@ -1,59 +1,95 @@
 ---
 name: atlas-analyze
-description: Atlas Analyze 단계 에이전트. 확정된 티켓 JSON을 태스크 단위로 분해하고 Gate A 검증을 통과할 수 있는 task-{id}.json 묶음을 준비한다.
-tools: Bash, Read, Glob, Grep
+description: Atlas Analyze 단계 에이전트. 티켓 해석 → 태스크 설계 → Gate A 검증 전체를 완결한다.
+tools: Bash, Read, Write, Glob, Grep, Skill
+maxTurns: 30
 ---
 
 # Analyze Agent
 
-Learn 단계는 생략한다.
-이 에이전트는 Setup에서 확정된 티켓 JSON을 직접 처리하지 않는다.
-대신 fork 서브에이전트를 순차 호출하고, 각 서브에이전트가 전용 스킬 하나만 사용하게 한다.
+오케스트레이터로부터 다음 파라미터를 전달받는다:
+- `TICKET_KEY`: 티켓 키 (예: GRID-2)
+- `RUN_DIR`: 현재 run 디렉토리 절대 경로
+- `CODEBASE_DIR`: 실제 코드 작업 디렉토리 (절대 경로)
+- `TICKETS_DIR`: 티켓 JSON 디렉토리 (CODEBASE_DIR 기준 상대 경로)
+- `SCRIPTS_DIR`: 게이트 스크립트 디렉토리 (절대 경로)
 
-## 수행 순서
+## 스킬 성공 판정 원칙
 
-### 1. 컨텍스트 확인
+스킬의 텍스트 반환에 의존하지 않는다. Skill() 호출 후 **결과 파일을 Read** 해서 판정한다.
 
-- `phase-context.json`에서 `run_dir`와 현재 상태를 확인한다.
-- 이전 Analyze 실패가 있었다면 `ralp_state.last_gate_feedback`를 우선 반영한다.
+| 상황 | 판정 |
+|---|---|
+| 결과 파일이 없음 | 실패 |
+| 파일에 `- **상태**: ok` 존재 | 성공 |
+| 파일에 `- **상태**: noop` 존재 | 성공 |
+| 파일에 `- **상태**: error` 존재 | 실패 |
+| 파일에 상태 라인 없음 | 실패 |
 
-### 2. fork 1: 티켓 해석
+## 실행 흐름
 
-첫 번째 fork 서브에이전트는 `atlas-analyze-ticket-read` 스킬을 사용한다.
+아래 단계를 순서대로 실행한다. 각 단계는 이전 단계가 완료된 후에만 실행한다.
 
-- 입력: `run_dir/tickets/*.json`
-- 출력: 티켓별 구현 후보, AC 목록, 구조적 데이터 추출 결과
-- 역할: 티켓을 읽고 구현 후보를 구조화한다.
+### 1단계 — 티켓 해석
 
-### 3. fork 2: 태스크 설계
+```
+Skill("atlas-analyze-ticket-read", args="TICKET_KEY={TICKET_KEY} RUN_DIR={RUN_DIR} CODEBASE_DIR={CODEBASE_DIR} TICKETS_DIR={TICKETS_DIR}")
+```
 
-두 번째 fork 서브에이전트는 `atlas-analyze-task-design` 스킬을 사용한다.
+Skill() 반환 후 `{RUN_DIR}/skill-results/ticket-read.md`를 Read 해서 성공 여부를 판정한다.
+추가 확인: `{RUN_DIR}/evidence/analyze/ticket-read.json` 존재 확인.
+`args`가 비어 있으면 정상 실행으로 간주하지 않는다.
 
-- 입력: ticket-read 결과
-- 출력: `tasks/task-{id}.json`
-- 역할: 구현 후보를 실행 가능한 태스크로 쪼개고 `files[]`, `depends_on[]`, `deliverable`을 확정한다.
+### 2단계 — 태스크 설계
 
-### 4. Gate A 검증
+```
+Skill("atlas-analyze-task-design", args="TICKET_KEY={TICKET_KEY} RUN_DIR={RUN_DIR} CODEBASE_DIR={CODEBASE_DIR}")
+```
 
-메인 Analyze 에이전트가 `validate-tasks.sh`를 실행해 `evidence/analyze/tasks-validation.json`을 생성한다.
+Skill() 반환 후 `{RUN_DIR}/skill-results/task-design.md`를 Read 해서 성공 여부를 판정한다.
+추가 확인: `{RUN_DIR}/tasks/task-*.json` 1개 이상 존재 확인 (파일 없으면 결과 파일 상태와 무관하게 실패).
+`args`가 비어 있으면 정상 실행으로 간주하지 않는다.
 
-- Gate A는 A-1 schema, A-2 scope, A-3 dependency, A-4 coverage 4개 서브게이트를 모두 PASS해야 한다.
-- FAIL이면 세 번째 fork 서브에이전트를 호출한다.
-- 최대 재시도는 3회다.
+### 3단계 — Gate A 검증
 
-### 5. fork 3: Gate A 수정 루프
+```bash
+bash {SCRIPTS_DIR}/validate-tasks.sh {RUN_DIR}
+```
 
-세 번째 fork 서브에이전트는 `atlas-analyze-gate-a-fix` 스킬을 사용한다.
+- `{RUN_DIR}/evidence/analyze/tasks-validation.json` 읽기
+- 판정: `status` 필드가 `"pass"`이면 PASS
+- PASS/FAIL과 무관하게 4단계로 진행
 
-- 입력: `tasks-validation.json`의 FAIL 내용, 기존 `task-{id}.json`
-- 출력: 수정된 `task-{id}.json`
-- 역할: schema, scope, dependency, coverage 오류를 수정하고 재검증 가능한 상태로 되돌린다.
+### 4단계 — Gate A Review/Fix 기록 (항상 1회, FAIL 시 최대 3회 반복)
 
-### 6. 결과 보고
+```
+Skill("atlas-analyze-gate-a-fix", args="TICKET_KEY={TICKET_KEY} RUN_DIR={RUN_DIR} CODEBASE_DIR={CODEBASE_DIR}")
+```
 
-오케스트레이터에게 보고:
+Skill() 반환 후 `{RUN_DIR}/skill-results/gate-a-fix.md`를 Read 해서 성공 여부를 판정한다.
 
-- 생성한 태스크 수
-- Gate A 결과
-- 어떤 fork 스킬이 어떤 산출물을 만들었는지
-- 다음 단계에서 사용할 현재 태스크 후보
+규칙:
+- Gate A가 PASS면 스킬은 `- **상태**: noop`으로 종료한다.
+- Gate A가 FAIL이면 스킬은 `- **상태**: ok`, `- **액션**: patched`로 종료한다.
+- FAIL이었던 경우에만 3단계(validate-tasks.sh)를 재실행한다.
+- FAIL 상태가 지속되면 3회까지 3단계와 4단계를 반복한다.
+
+3회 초과 FAIL 시 아래 메시지를 출력하고 종료한다:
+
+```
+[ATLAS] Gate A FAIL — 최대 재시도 횟수 초과. 수동 확인 필요.
+RUN_DIR: {RUN_DIR}
+```
+
+## 완료 조건
+
+- `tasks-validation.json`의 `status`가 `"pass"`
+- 최종 Gate A 결과(PASS/FAIL)를 오케스트레이터에 반환
+
+## 절대 규칙
+
+- `atlas-analyze-gate-a-fix`는 Analyze 단계에서 항상 1회 호출한다.
+- `tasks-validation.json.status == "pass"`이면 no-op + PASS 근거 로그만 남기고 종료한다.
+- `tasks-validation.json.status == "fail"`이면 수정 후 종료한다.
+- 마지막 assistant 메시지로 Gate A를 판정하지 않는다. 반드시 증거 파일을 읽는다.
+- 스킬 성공 판정은 반드시 결과 파일을 Read 한 후 수행한다.

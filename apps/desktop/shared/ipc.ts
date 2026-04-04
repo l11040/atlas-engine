@@ -1,4 +1,4 @@
-// 렌더러 → 메인: CLI, 설정, Jira, 자동화 파이프라인
+// 렌더러 → 메인: CLI, 설정, 로그, 파이프라인
 export const IPC_CHANNELS = {
   cliRun: "cli:run",
   cliCancel: "cli:cancel",
@@ -7,23 +7,18 @@ export const IPC_CHANNELS = {
   gitDiff: "git:diff",
   configGet: "config:get",
   configUpdate: "config:update",
-  jiraTestConnection: "jira:test-connection",
-  jiraFetchTicketTree: "jira:fetch-ticket-tree",
-  jiraGetTicketTree: "jira:get-ticket-tree",
-  jiraGetAllTicketTrees: "jira:get-all-ticket-trees",
-  jiraProgress: "jira:progress",
-  // 렌더러 → 메인: 자동화 파이프라인 실행 제어
-  runStart: "run:start",
-  runCancel: "run:cancel",
-  runGetState: "run:get-state",
-  runReset: "run:reset",
-  // 렌더러 → 메인: 작업 단위 제어 및 승인 게이트
-  taskGetState: "task:get-state",
-  taskGetAllStates: "task:get-all-states",
-  taskCancel: "task:cancel",
-  taskApprove: "task:approve",
-  taskReject: "task:reject",
-  taskRegenerate: "task:regenerate"
+  // 렌더러 → 메인: 로그 감시 제어
+  logWatcherStart: "log-watcher:start",
+  logWatcherStop: "log-watcher:stop",
+  // 렌더러 → 메인: 로그 조회
+  logQuery: "log:query",
+  // 메인 → 렌더러: 새 로그 push
+  logNewEntries: "log:new-entries",
+  // 렌더러 → 메인: 파이프라인 정의 CRUD
+  pipelineGet: "pipeline:get",
+  pipelineSave: "pipeline:save",
+  pipelineImport: "pipeline:import",
+  pipelineList: "pipeline:list"
 } as const;
 
 // ─── Provider ──────────────────────────────────────
@@ -233,8 +228,6 @@ export interface GitDiffResponse {
 // ─── App Settings ───────────────────────────────────────
 
 // 목적: provider 간 공통 권한 모드를 정의한다.
-// auto: 모든 도구 권한을 자동 승인 (Claude: bypassPermissions, Codex: --full-auto)
-// manual: 사용자 확인 후 실행 (Claude: default, Codex: 기본 동작)
 export type CliPermissionMode = "auto" | "manual";
 
 export interface CliSettings {
@@ -242,29 +235,10 @@ export interface CliSettings {
   permissionMode: CliPermissionMode;
 }
 
-// 목적: LangSmith 추적 설정을 정의한다.
-export interface TracingSettings {
-  enabled: boolean;
-  apiKey: string;
-  project: string;
-  endpoint: string;
-}
-
-// 목적: Jira REST API 연결 설정을 정의한다.
-export interface JiraSettings {
-  baseUrl: string;
-  email: string;
-  apiToken: string;
-  /** 목적: 프로젝트 키 프리픽스. 설정하면 숫자만 입력해도 자동으로 붙인다. (예: "GRID") */
-  projectPrefix: string;
-}
-
 export interface AppSettings {
   defaultCwd: string;
   activeProvider: ProviderType;
   cli: CliSettings;
-  tracing?: TracingSettings;
-  jira?: JiraSettings;
 }
 
 // 목적: 부분 업데이트를 지원하기 위한 재귀적 Partial 타입
@@ -276,298 +250,68 @@ export interface AppSettingsUpdateRequest {
   settings: DeepPartial<AppSettings>;
 }
 
-// ─── Automation Pipeline: 상태 모델 ─────────────────────────
-// 목적: 요구사항 기반 자동화 파이프라인의 전체 상태를 정의한다.
+// ─── Log Query ──────────────────────────────────────────
+// 렌더러 → 메인: 훅 로그 조회 요청
 
-export type RunStatus = "idle" | "running" | "paused" | "completed" | "failed";
-
-export type RunStep =
-  | "idle"
-  | "ingestion"
-  | "analyze"
-  | "risk"
-  | "plan"
-  | "execution"
-  | "archiving"
-  | "done";
-
-export interface RunState {
-  runId: string;
-  ticketId: string;
-  status: RunStatus;
-  currentStep: RunStep;
-  startedAt: number | null;
-  endedAt: number | null;
-  error: string | null;
-  parsedRequirements: ParsedRequirements | null;
-  riskAssessment: RiskAssessment | null;
-  executionPlan: ExecutionPlan | null;
-  logs: RunLogEntry[];
-  toolTimeline: ToolTimelineEntry[];
+export interface LogQueryRequest {
+  sessionId?: string;
+  type?: "agent" | "skill";
+  name?: string;
+  since?: string;
+  limit?: number;
 }
 
-export interface RunLogEntry {
-  timestamp: number;
-  level: "info" | "error";
-  step: RunStep | "system";
-  node: string;
-  message: string;
-}
+export type NodeStatus = "pending" | "running" | "completed" | "failed";
 
-// ─── 요구사항 ─────────────────────────────────────────
-
-export interface AcceptanceCriterion {
-  id: string;
-  description: string;
-  testable: boolean;
-}
-
-export interface TestScenario {
-  id: string;
-  description: string;
-  linked_ac_ids: string[];
-}
-
-export interface ParsedRequirements {
-  acceptance_criteria: AcceptanceCriterion[];
-  policy_rules: string[];
-  implementation_steps: string[];
-  test_scenarios: TestScenario[];
-  missing_sections: string[];
-  /** 목적: 요구사항 간 모호성·충돌을 기록한다. */
-  ambiguity_list: string[];
-  /** 목적: 외부 의존성 및 선행 조건을 기록한다. */
-  dependency_list: string[];
-  description_raw: string;
-}
-
-// ─── 위험 평가 ────────────────────────────────────────
-
-export interface RiskFactor {
-  category: string;
-  description: string;
-  severity: "low" | "medium" | "high";
-}
-
-export interface RiskAssessment {
-  level: "low" | "medium" | "high";
-  factors: RiskFactor[];
-  recommendation: string;
-}
-
-// ─── 실행 계획 ────────────────────────────────────────
-
-export interface TaskUnit {
-  id: string;
-  title: string;
-  description: string;
-  linked_ac_ids: string[];
-  deps: string[];
-  scope: {
-    editable_paths: string[];
-    forbidden_paths: string[];
-  };
-  verify_cmd: string | null;
-}
-
-export interface ExecutionPlan {
-  tasks: TaskUnit[];
-  execution_order: string[];
-  /** 목적: 검증 전략을 기술한다 (예: "unit test + typecheck + lint"). */
-  validation_strategy: string;
-  /** 목적: 롤백 전략을 기술한다. */
-  rollback_strategy: string;
-}
-
-// ─── 작업 실행 상태 (Task 단위) ──────────────────────
-
-export type TaskStatus =
-  | "idle"
-  | "running"
-  | "awaiting_approval"
-  | "approved"
-  | "rejected"
-  | "completed"
-  | "failed";
-
-export type TaskStep =
-  | "idle"
-  | "generate_changes"
-  | "explain_changes"
-  | "self_verify"
-  | "revise"
-  | "approval_gate"
-  | "apply_changes"
-  | "post_verify"
-  | "done";
-
-export interface TaskExecutionState {
-  taskId: string;
-  status: TaskStatus;
-  currentStep: TaskStep;
-  attempt: { current: number; max: number };
-  changeSets: ChangeSet | null;
-  explanation: ChangeExplanation | null;
-  /** 목적: 승인 전(코드 생성 단계) 검증 결과 */
-  verification: VerificationResult | null;
-  /** 목적: 적용/커밋 이후 회귀 검증 결과 */
-  postVerification: VerificationResult | null;
-  approval: ApprovalRecord | null;
-  error: string | null;
-  startedAt: number | null;
-  endedAt: number | null;
-  logs: TaskLogEntry[];
-}
-
-export interface TaskLogEntry {
-  timestamp: number;
-  level: "info" | "error";
-  step: TaskStep;
-  node: string;
-  message: string;
-}
-
-// ─── 변경 ─────────────────────────────────────────────
-
-export interface ChangeSet {
-  changes: Array<{
-    path: string;
-    action: "create" | "modify" | "delete";
-    diff_summary: string;
-  }>;
-  diff: string | null;
-  scope_violations: string[];
-}
-
-export interface ChangeExplanation {
-  summary: string;
-  /** 목적: 선택한 구현 방향의 이유를 기록한다. */
-  implementation_rationale: string;
-  change_reasons: Array<{
-    path: string;
-    reason: string;
-    linked_ac_ids: string[];
-  }>;
-  /** 목적: 정책·제약 고려 내용을 기록한다. */
-  policy_considerations: string[];
-  /** 목적: 고려하였으나 선택하지 않은 대안을 기록한다. */
-  alternatives_considered: string[];
-  risk_notes: string[];
-}
-
-// ─── 검증 ─────────────────────────────────────────────
-
-export interface VerificationCheck {
+export interface HookLogEntry {
+  id: number;
+  type: "agent" | "skill";
+  sessionId: string;
   name: string;
-  passed: boolean;
-  detail: string;
+  instanceKey?: string;
+  startTime: string;
+  // 목적: 에이전트 실행 중(stop 훅 전)에는 null이므로 optional로 처리한다.
+  endTime?: string;
+  durationSec?: number;
+  caller?: { agentId: string; agentType: string } | "orchestrator";
+  args?: string;
+  childAgentId?: string;
+  childStatus?: string;
+  detail?: string;
 }
 
-export interface VerificationResult {
-  verdict: "pass" | "fail";
-  checks: VerificationCheck[];
-  failure_reasons: string[];
+export interface SessionSummary {
+  sessionId: string;
+  startedAt: string;
+  endedAt: string;
+  agentCount: number;
+  skillCount: number;
+  args?: string;
 }
 
-// ─── 승인 ─────────────────────────────────────────────
+// ─── Pipeline Definition ────────────────────────────────
+// 렌더러 → 메인: 파이프라인 정의 CRUD
 
-export interface ApprovalRecord {
-  decision: "approved" | "rejected" | "regenerate";
-  reason: string | null;
-  decidedAt: number;
-  decidedBy: "auto" | "human";
+export interface PipelineDefinition {
+  id: string;
+  name: string;
+  nodes: PipelineNodeDef[];
+  edges: PipelineEdgeDef[];
 }
 
-// ─── Automation IPC ─────────────────────────────────────
-
-export interface RunStartRequest {
-  ticketId: string;
-  // 목적: 지정된 단계부터 실행을 시작한다. 이전 단계의 결과는 직전 Run에서 복사한다.
-  startFromStep?: RunStep;
+export interface PipelineNodeDef {
+  id: string;
+  type: "agent" | "skill";
+  label: string;
+  description?: string;
+  parentId?: string;
 }
 
-export interface RunStartResponse {
-  status: "accepted" | "rejected";
-  runId: string;
-  message?: string;
+export interface PipelineEdgeDef {
+  source: string;
+  target: string;
+  label?: string;
 }
-
-export interface RunCancelRequest {
-  runId: string;
-}
-
-export interface TaskApprovalRequest {
-  taskId: string;
-  decision: "approved" | "rejected" | "regenerate";
-  reason?: string;
-}
-
-// ─── Jira Ticket (API 응답 정규화) ──────────────────────────
-// 목적: Jira REST API에서 가져온 이슈를 정규화한 타입을 정의한다.
-// 계층: Epic → Story → Subtask, links로 관계 표현
-
-export interface JiraTicketLink {
-  type: "Blocks" | "Relates" | string;
-  direction: "inward" | "outward";
-  key: string;
-}
-
-export interface JiraTicket {
-  key: string;
-  summary: string;
-  status: string;
-  issuetype: string;
-  priority: string;
-  assignee: string | null;
-  reporter: string | null;
-  created: string;
-  updated: string;
-  parent: string | null;
-  subtasks: string[];
-  links: JiraTicketLink[];
-  labels: string[];
-  description: string | null;
-}
-
-export interface JiraTicketTree {
-  root: string;
-  exportedAt: string;
-  total: number;
-  tickets: Record<string, JiraTicket>;
-}
-
-// ─── Jira IPC ─────────────────────────────────────────────
-// 렌더러 → 메인: Jira 연결 테스트 및 티켓 트리 조회
-
-export interface JiraTestConnectionRequest {
-  baseUrl: string;
-  email: string;
-  apiToken: string;
-}
-
-export interface JiraTestConnectionResponse {
-  success: boolean;
-  message: string;
-  displayName?: string;
-}
-
-export interface JiraFetchTicketTreeRequest {
-  ticketKey: string;
-}
-
-export interface JiraFetchTicketTreeResponse {
-  success: boolean;
-  message: string;
-  tree?: JiraTicketTree;
-}
-
-// ─── Jira Progress Event ─────────────────────────────────
-// 메인 → 렌더러: 티켓 트리 수집 진행 상태 push
-export type JiraProgressEvent =
-  | { phase: "fetching"; key: string; collected: number }
-  | { phase: "searching-children"; key: string; collected: number }
-  | { phase: "completed"; total: number }
-  | { phase: "error"; message: string };
 
 // ─── Desktop API (preload → renderer) ───────────────────
 
@@ -577,20 +321,17 @@ export interface AtlasDesktopApi {
   getCliAuthStatus(request: CliAuthCheckRequest): Promise<CliAuthStatusResponse>;
   getGitDiff(request: GitDiffRequest): Promise<GitDiffResponse>;
   onCliEvent(listener: (event: CliEvent) => void): () => void;
-  // 자동화 파이프라인
-  startRun(request: RunStartRequest): Promise<RunStartResponse>;
-  cancelRun(request: RunCancelRequest): Promise<void>;
-  getRunState(): Promise<RunState | null>;
-  resetRun(): Promise<void>;
-  getTaskState(taskId: string): Promise<TaskExecutionState | null>;
-  getAllTaskStates(): Promise<Record<string, TaskExecutionState>>;
-  cancelTask(taskId: string): Promise<void>;
-  approveTask(request: TaskApprovalRequest): Promise<void>;
   getConfig(): Promise<AppSettings>;
   updateConfig(request: AppSettingsUpdateRequest): Promise<AppSettings>;
-  testJiraConnection(request: JiraTestConnectionRequest): Promise<JiraTestConnectionResponse>;
-  fetchJiraTicketTree(request: JiraFetchTicketTreeRequest): Promise<JiraFetchTicketTreeResponse>;
-  getJiraTicketTree(rootKey: string): Promise<JiraTicketTree | null>;
-  getAllJiraTicketTrees(): Promise<JiraTicketTree[]>;
-  onJiraProgress(listener: (event: JiraProgressEvent) => void): () => void;
+  // 로그
+  startLogWatcher(cwd: string): Promise<void>;
+  stopLogWatcher(): Promise<void>;
+  queryLogs(request: LogQueryRequest): Promise<HookLogEntry[]>;
+  querySessions(): Promise<SessionSummary[]>;
+  onLogNewEntries(listener: (entries: HookLogEntry[]) => void): () => void;
+  // 파이프라인
+  getPipeline(id: string): Promise<PipelineDefinition | null>;
+  savePipeline(definition: PipelineDefinition): Promise<void>;
+  importPipeline(): Promise<PipelineDefinition | null>;
+  listPipelines(): Promise<Array<{ id: string; name: string }>>;
 }

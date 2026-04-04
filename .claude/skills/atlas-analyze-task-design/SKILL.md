@@ -1,7 +1,9 @@
 ---
 name: atlas-analyze-task-design
-context: fork
 description: Atlas Analyze의 두 번째 세부 스킬. 티켓 해석 결과를 실행 가능한 task-{id}.json 묶음으로 설계해야 할 때 사용한다.
+context: fork
+agent: atlas-analyze
+user-invocable: false
 ---
 
 # Atlas Analyze Task Design
@@ -45,6 +47,7 @@ description: Atlas Analyze의 두 번째 세부 스킬. 티켓 해석 결과를 
 - `files[]`는 티켓의 구조적 데이터에서 유도 가능한 경로만 포함한다.
 - `depends_on[]`는 실제 선행 작업만 포함한다.
 - 모든 acceptance criteria는 최소 1개 태스크에 연결한다.
+- 필수 인자(`TICKET_KEY`, `RUN_DIR`, `CODEBASE_DIR`)가 비어 있으면 스킬 설명 요약으로 대체하지 말고 인자 누락 오류를 반환한다.
 
 ## 최소 포함 필드
 
@@ -55,3 +58,46 @@ description: Atlas Analyze의 두 번째 세부 스킬. 티켓 해석 결과를 
 - `files`
 - `depends_on`
 - `deliverable`
+
+## 반환 형식
+
+반드시 아래 마크다운 형식으로 반환한다. JSON 객체, 코드펜스 감싼 JSON, 자유 설명 텍스트는 반환하지 않는다.
+
+```
+## 스킬 결과
+
+- **스킬**: atlas-analyze-task-design
+- **상태**: ok | error
+- **티켓**: {TICKET_KEY}
+- **제목**: {n}개 태스크 설계 완료
+
+## 요약
+
+{분리/병합 결정 근거, 태스크 경계 설정 논리 서술.}
+
+## 설계된 태스크
+
+| 태스크 | 제목 | 소스 티켓 | 의존성 |
+|---|---|---|---|
+| TASK-01 | Core 엔티티 구현 | GRID-79 | — |
+| TASK-02 | Support 엔티티 구현 | GRID-79 | TASK-01 |
+
+## AC 커버리지
+
+| 티켓 | AC | 매핑된 태스크 |
+|---|---|---|
+| GRID-79 | PointAccount @Version 포함 | TASK-01 |
+```
+
+규칙:
+- `task-{id}.json` 생성 후 이 형식으로 반환한다.
+- `## AC 커버리지`는 모든 티켓의 모든 AC가 최소 1개 태스크에 매핑됐음을 확인하는 목적이다.
+
+## 마지막 단계 (필수)
+
+모든 작업 완료 후 반드시 아래 순서로 실행한다:
+
+1. 위 마크다운 결과를 `{RUN_DIR}/skill-results/task-design.md`에 **Write** 한다.
+2. 아무 설명 없이 `## 스킬 결과` 로 시작하는 마크다운만 출력한다.
+
+파일 Write는 텍스트 출력보다 먼저 실행한다.
