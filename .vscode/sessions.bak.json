@@ -13,13 +13,6 @@
           "icon": "server",
           "color": "terminal.ansiBlue",
           "commands": ["pnpm --filter desktop dev"]
-        },
-        {
-          "name": "langgraph-studio",
-          "autoExecuteCommands": true,
-          "icon": "graph",
-          "color": "terminal.ansiMagenta",
-          "commands": ["cd apps/desktop && pnpm studio"]
         }
       ],
       {

@@ -193,11 +193,6 @@ await runCliToCompletion({
 - `runningJobs` 맵에 세션 핸들을 저장
 - `cancel(requestId)`에서 `session.cancel()` 호출
 
-### LangChain Wrapper
-
-- `runCliToCompletion` 결과에서 `phase === "text"`만 합쳐 `_call()` 결과로 반환
-- 필요 시 `events`를 저장해 `tool timeline`/`terminal log` 생성
-
 ## 9. 운영 체크리스트
 
 - 타임아웃은 provider/작업 타입별로 분리해서 관리할 것

@@ -19,7 +19,6 @@ apps/desktop/                      Electron desktop app (React + TypeScript + Ta
 │   ├── services/
 │   │   ├── config/                앱 설정 읽기/쓰기
 │   │   ├── git/                   Git diff 서비스
-│   │   ├── langchain/             LangGraph 기반 flow 실행 엔진
 │   │   └── providers/             CLI provider 추상화 (claude, codex)
 │   │       ├── claude/            Claude CLI provider + stream-json 파서
 │   │       ├── codex/             Codex CLI provider + jsonl 파서
@@ -64,7 +63,6 @@ packages/*                         Turborepo 공유 패키지 (예약)
 - window 생성: `electron/window/*`
 - IPC 핸들러 등록: `electron/ipc/*`
 - CLI provider 추상화: `electron/services/providers/*`
-- LangGraph flow 엔진: `electron/services/langchain/*`
 
 ### 렌더러 (feature-based 구조)
 - 라우트 페이지 컴포넌트는 반드시 `src/pages/`에 배치한다. feature 폴더에 페이지를 두지 않는다.
