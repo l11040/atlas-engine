@@ -4,21 +4,17 @@ import { ReactFlow, Background, Controls, type NodeTypes, type NodeMouseHandler 
 import "@xyflow/react/dist/style.css";
 import type { Node, Edge } from "@xyflow/react";
 import { AgentNode } from "./agent-node";
-import { SkillNode } from "./skill-node";
 import { GroupNode } from "./group-node";
-import { InstanceGroupNode } from "./instance-group-node";
 
 const nodeTypes: NodeTypes = {
   agent: AgentNode,
-  skill: SkillNode,
-  group: GroupNode,
-  instanceGroup: InstanceGroupNode
+  group: GroupNode
 };
 
 interface PipelineCanvasProps {
   nodes: Node[];
   edges: Edge[];
-  onNodeSelect?: (nodeId: string | null, selectedLogId?: number | null, selectedLogType?: "agent" | "skill" | null) => void;
+  onNodeSelect?: (nodeId: string | null, logId?: number | null, logType?: "agent" | "skill" | null) => void;
 }
 
 export function PipelineCanvas({ nodes, edges, onNodeSelect }: PipelineCanvasProps) {
@@ -29,19 +25,9 @@ export function PipelineCanvas({ nodes, edges, onNodeSelect }: PipelineCanvasPro
         return;
       }
 
-      const selectedNode = node as Node & {
-        data?: {
-          baseNodeId?: string;
-          defaultSelectedLogId?: number | null;
-          defaultSelectedLogType?: "agent" | "skill" | null;
-        };
-      };
+      const selectedNode = node as Node & { data?: { baseNodeId?: string } };
 
-      onNodeSelect?.(
-        selectedNode.data?.baseNodeId ?? selectedNode.id,
-        selectedNode.data?.defaultSelectedLogId ?? null,
-        selectedNode.data?.defaultSelectedLogType ?? null
-      );
+      onNodeSelect?.(selectedNode.data?.baseNodeId ?? selectedNode.id, null, null);
     },
     [onNodeSelect]
   );
@@ -53,7 +39,7 @@ export function PipelineCanvas({ nodes, edges, onNodeSelect }: PipelineCanvasPro
         edges={edges}
         nodeTypes={nodeTypes}
         onNodeClick={handleNodeClick}
-        onPaneClick={() => onNodeSelect?.(null, null, null)}
+        onPaneClick={() => onNodeSelect?.(null)}
         fitView
         fitViewOptions={{ padding: 0.2 }}
         minZoom={0.3}

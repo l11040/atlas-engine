@@ -7,9 +7,9 @@ import { startLogWatcher, stopLogWatcher } from "../services/log-watcher/log-wat
 import { queryAllLogs, querySessions } from "../services/log-watcher/log-query-service";
 
 export function registerLogIpc(): void {
-  // 목적: logWatcherStart → 지정 cwd에서 JSONL 감시를 시작한다.
-  ipcMain.handle(IPC_CHANNELS.logWatcherStart, (_event, cwd: string) => {
-    startLogWatcher(cwd);
+  // 목적: logWatcherStart → DB 폴링을 시작한다.
+  ipcMain.handle(IPC_CHANNELS.logWatcherStart, () => {
+    startLogWatcher();
   });
 
   // 목적: logWatcherStop → 감시를 중지한다.

@@ -4,9 +4,7 @@ import { useReactFlow, ReactFlowProvider } from "@xyflow/react";
 import { AppShell } from "@/components/layout/app-shell";
 import { LogPanel } from "@/features/log-viewer/components/log-panel";
 import { SessionSelector } from "@/features/session/components/session-selector";
-import { AuthStatusBadge } from "@/features/session/components/auth-status-badge";
 import { useSessions } from "@/features/session/hooks/use-sessions";
-import { useAuthStatus } from "@/features/session/hooks/use-auth-status";
 import { PipelineCanvas } from "@/features/pipeline-graph/components/pipeline-canvas";
 import { PipelineToolbar } from "@/features/pipeline-graph/components/pipeline-toolbar";
 import { usePipelineGraph } from "@/features/pipeline-graph/hooks/use-pipeline-graph";
@@ -22,8 +20,7 @@ const TIMELINE_H_MAX = 520;
 
 function PipelinePageInner() {
   const reactFlow = useReactFlow();
-  const { sessions } = useSessions();
-  const { activeProvider, activeStatus } = useAuthStatus();
+  const { sessions, loading: sessionsLoading } = useSessions();
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedLogId, setSelectedLogId] = useState<number | null>(null);
@@ -69,11 +66,7 @@ function PipelinePageInner() {
     if (didInitRef.current) return;
     didInitRef.current = true;
 
-    // 이유: defaultCwd가 비어있으면 현재 디렉토리 기준으로 감시한다.
-    window.atlas.getConfig().then((config) => {
-      const cwd = config.defaultCwd || ".";
-      window.atlas.startLogWatcher(cwd);
-    });
+    window.atlas.startLogWatcher();
 
     window.atlas.listPipelines().then(async (list) => {
       if (list.length > 0) {
@@ -196,16 +189,10 @@ function PipelinePageInner() {
   return (
     <AppShell
       headerLeft={
-        <SessionSelector sessions={sessions} selectedId={sessionId} onSelect={setSessionId} />
+        <SessionSelector sessions={sessions} selectedId={sessionId} onSelect={setSessionId} loading={sessionsLoading} />
       }
       headerCenter={
         <span className="text-xs font-semibold text-[var(--color-text-strong)]">{pipelineName}</span>
-      }
-      headerRight={
-        <AuthStatusBadge
-          provider={activeProvider}
-          state={activeStatus?.state ?? "checking"}
-        />
       }
     >
       <PipelineToolbar onImport={handleImport} onFitView={handleFitView} />

@@ -154,7 +154,6 @@ function buildExecutionRows(
         (entry) =>
           entry.type === "skill" &&
           entry.caller !== undefined &&
-          entry.caller !== "orchestrator" &&
           entry.caller.agentId === agentLog.instanceKey &&
           childIds.includes(entry.name)
       )
@@ -322,7 +321,6 @@ function layoutGraph(
         data: {
           label: node.label,
           status: rootStatus,
-          nodeType: node.type,
           baseNodeId: node.id,
           hasIncoming,
           hasOutgoing
@@ -352,7 +350,6 @@ function layoutGraph(
       data: {
         label: node.label,
         status: groupStatus,
-        nodeType: node.type,
         baseNodeId: node.id,
         isAgentSelected: isGroupSelected,
         executions,
@@ -362,8 +359,6 @@ function layoutGraph(
         selectedLogType: selection.logType,
         onSelect: onNodeSelect,
         onToggleExecution: onExecutionToggle,
-        defaultSelectedLogId: null,
-        defaultSelectedLogType: null,
         hasIncoming,
         hasOutgoing
       },

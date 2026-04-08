@@ -4,15 +4,6 @@ import {
   type AppSettings,
   type AppSettingsUpdateRequest,
   type AtlasDesktopApi,
-  type CliAuthCheckRequest,
-  type CliAuthStatusResponse,
-  type CliCancelRequest,
-  type CliCancelResponse,
-  type CliEvent,
-  type CliRunRequest,
-  type CliRunResponse,
-  type GitDiffRequest,
-  type GitDiffResponse,
   type HookLogEntry,
   type LogQueryRequest,
   type PipelineDefinition,
@@ -20,27 +11,6 @@ import {
 } from "../shared/ipc";
 
 const api: AtlasDesktopApi = {
-  runCli(request: CliRunRequest): Promise<CliRunResponse> {
-    return ipcRenderer.invoke(IPC_CHANNELS.cliRun, request);
-  },
-  cancelCli(request: CliCancelRequest): Promise<CliCancelResponse> {
-    return ipcRenderer.invoke(IPC_CHANNELS.cliCancel, request);
-  },
-  getCliAuthStatus(request: CliAuthCheckRequest): Promise<CliAuthStatusResponse> {
-    return ipcRenderer.invoke(IPC_CHANNELS.cliAuthStatus, request);
-  },
-  getGitDiff(request: GitDiffRequest): Promise<GitDiffResponse> {
-    return ipcRenderer.invoke(IPC_CHANNELS.gitDiff, request);
-  },
-  onCliEvent(listener: (event: CliEvent) => void) {
-    const wrapped = (_event: Electron.IpcRendererEvent, payload: CliEvent) => {
-      listener(payload);
-    };
-    ipcRenderer.on(IPC_CHANNELS.cliEvent, wrapped);
-    return () => {
-      ipcRenderer.removeListener(IPC_CHANNELS.cliEvent, wrapped);
-    };
-  },
   // 설정
   getConfig(): Promise<AppSettings> {
     return ipcRenderer.invoke(IPC_CHANNELS.configGet);
@@ -49,8 +19,8 @@ const api: AtlasDesktopApi = {
     return ipcRenderer.invoke(IPC_CHANNELS.configUpdate, request);
   },
   // 로그
-  startLogWatcher(cwd: string): Promise<void> {
-    return ipcRenderer.invoke(IPC_CHANNELS.logWatcherStart, cwd);
+  startLogWatcher(): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.logWatcherStart);
   },
   stopLogWatcher(): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.logWatcherStop);

@@ -18,6 +18,7 @@ function resolveStatusForLogs(
   if (options?.plannedExecutionCount != null && logs.length < options.plannedExecutionCount) {
     return "running";
   }
+  if (logs.some((log) => log.childStatus === "failed")) return "failed";
   return "completed";
 }
 

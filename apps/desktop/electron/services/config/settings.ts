@@ -5,23 +5,10 @@ import { decodeStoredValue, encodeStoredValue } from "../storage/codec";
 import { getAppDatabase } from "../storage/sqlite-db";
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  defaultCwd: "",
-  activeProvider: "claude",
-  cli: {
-    timeoutMs: 300_000,
-    permissionMode: "auto"
-  }
+  defaultCwd: ""
 };
 
 let cached: AppSettings | null = null;
-
-function cloneDefaultSettings(): AppSettings {
-  return {
-    defaultCwd: DEFAULT_SETTINGS.defaultCwd,
-    activeProvider: DEFAULT_SETTINGS.activeProvider,
-    cli: { ...DEFAULT_SETTINGS.cli }
-  };
-}
 
 // 목적: 기본값 키를 기준으로 재귀 병합한다 (forward compatibility).
 function deepMergeDefaults(
@@ -73,16 +60,15 @@ export async function loadSettings(): Promise<AppSettings> {
     }
   }
 
-  cached = cloneDefaultSettings();
+  cached = { ...DEFAULT_SETTINGS };
   persistSettings(cached);
   return cached;
 }
 
-// 목적: 캐시된 설정을 동기 반환한다 (provider 등 hot-path에서 사용).
+// 목적: 캐시된 설정을 동기 반환한다.
 export function getSettings(): AppSettings {
   if (!cached) {
-    // 주의: loadSettings()가 호출되기 전에 접근하면 기본값을 반환한다.
-    return cloneDefaultSettings();
+    return { ...DEFAULT_SETTINGS };
   }
   return cached;
 }

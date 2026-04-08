@@ -1,5 +1,4 @@
 import { app, BrowserWindow } from "electron";
-import { registerCliIpc } from "./ipc/register-cli-ipc";
 import { registerConfigIpc } from "./ipc/register-config-ipc";
 import { registerLogIpc } from "./ipc/register-log-ipc";
 import { registerPipelineIpc } from "./ipc/register-pipeline-ipc";
@@ -20,7 +19,6 @@ app.whenReady().then(async () => {
   await loadSettings();
 
   registerConfigIpc();
-  registerCliIpc();
   registerLogIpc();
   registerPipelineIpc();
   createMainWindow();

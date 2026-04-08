@@ -45,5 +45,5 @@ export function useLogQuery(sessionId: string | null) {
     }, [sessionId])
   );
 
-  return { logs, loading, refresh };
+  return { logs, loading };
 }

@@ -26,5 +26,5 @@ export function useSessions() {
     }, [refresh])
   );
 
-  return { sessions, loading, refresh };
+  return { sessions, loading };
 }

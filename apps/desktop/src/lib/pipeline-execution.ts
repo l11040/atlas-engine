@@ -75,14 +75,13 @@ export function collectChildAgentIds(logs: HookLogEntry[]): Set<string> {
       entry.type === "skill" &&
       !entry.childAgentId &&
       !entry.endTime &&
-      !!entry.caller &&
-      entry.caller !== "orchestrator"
+      !!entry.caller
     )
     .sort((a, b) => a.startTime.localeCompare(b.startTime));
 
   for (const skill of runningForkSkills) {
     const caller = skill.caller;
-    if (!caller || caller === "orchestrator") continue;
+    if (!caller) continue;
 
     const skillStartMs = new Date(skill.startTime).getTime();
     const candidates = agentLogs.filter((agent) => {
@@ -144,7 +143,7 @@ export function formatSkillExecutionLabel(
   childAgentIds: Set<string> = collectChildAgentIds(logs)
 ): string {
   const caller = skillLog.caller;
-  if (!caller || caller === "orchestrator") return skillLabel;
+  if (!caller) return skillLabel;
 
   const parentAgentLog = logs.find(
     (entry) => entry.type === "agent" && entry.instanceKey === caller.agentId

@@ -69,10 +69,9 @@ function formatSkillInstanceLabel(
   pipeline: PipelineDefinition | null
 ): string {
   const caller = log.caller;
-  const parentLabel =
-    caller && caller !== "orchestrator"
-      ? pipeline?.nodes.find((entry) => entry.id === caller.agentType)?.label
-      : undefined;
+  const parentLabel = caller
+    ? pipeline?.nodes.find((entry) => entry.id === caller.agentType)?.label
+    : undefined;
 
   return formatSkillExecutionLabel(parentLabel, node?.label ?? log.name, log, logs);
 }
@@ -217,7 +216,9 @@ function ExecutionInspector({
     return formatSkillInstanceLabel(nodeDef, log, logs, pipeline);
   }, [log, logs, nodeDef, nodeId, pipeline, type]);
 
-  const status = log ? (!log.endTime ? "running" : "completed") : (nodeStatuses[nodeId] ?? "pending");
+  const status = log
+    ? (!log.endTime ? "running" : log.childStatus === "failed" ? "failed" : "completed")
+    : (nodeStatuses[nodeId] ?? "pending");
 
   const executionItems = useMemo<ExecutionListItem[]>(() => {
     return [...relevantLogs]
@@ -228,7 +229,7 @@ function ExecutionInspector({
           entry.type === "skill"
             ? formatSkillInstanceLabel(nodeDef, entry, logs, pipeline)
             : formatAgentExecutionLabel(nodeDef?.label ?? entry.name, entry, logs),
-        status: entry.endTime ? "completed" : "running",
+        status: entry.endTime ? (entry.childStatus === "failed" ? "failed" : "completed") : "running",
         startedAt: entry.startTime,
         durationSec: entry.durationSec,
         logId: entry.id,
@@ -256,7 +257,6 @@ function ExecutionInspector({
             entry.name === childId &&
             (!selectedAgentInstanceKey ||
               (entry.caller !== undefined &&
-                entry.caller !== "orchestrator" &&
                 entry.caller.agentId === selectedAgentInstanceKey))
         )
         .sort((a, b) => a.startTime.localeCompare(b.startTime));
@@ -279,7 +279,7 @@ function ExecutionInspector({
         items.push({
           id: `${childId}-${entry.instanceKey ?? index + 1}`,
           label: formatSkillInstanceLabel(childDef, entry, logs, pipeline),
-          status: entry.endTime ? "completed" : "running",
+          status: entry.endTime ? (entry.childStatus === "failed" ? "failed" : "completed") : "running",
           startedAt: entry.startTime,
           durationSec: entry.durationSec,
           logId: entry.id,
@@ -347,7 +347,7 @@ function ExecutionInspector({
                       instance: <span className="font-mono text-[var(--color-text-strong)]">{log.instanceKey}</span>
                     </div>
                   )}
-                  {log.caller && log.caller !== "orchestrator" && (
+                  {log.caller && (
                     <div className="rounded-md bg-[var(--color-surface-subtle)] px-2.5 py-2 text-[11px] text-[var(--color-text-soft)]">
                       caller: <span className="font-mono text-[var(--color-text-strong)]">{log.caller.agentType}</span>{" "}
                       <span className="font-mono text-[var(--color-text-muted)]">({log.caller.agentId})</span>

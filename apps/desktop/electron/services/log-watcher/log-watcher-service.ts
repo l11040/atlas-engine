@@ -229,7 +229,7 @@ function initBaseline(): void {
   }
 }
 
-export function startLogWatcher(_cwd: string): void {
+export function startLogWatcher(): void {
   stopLogWatcher();
   initBaseline();
 
