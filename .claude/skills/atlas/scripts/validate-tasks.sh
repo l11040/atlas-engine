@@ -5,11 +5,13 @@
 #   validate-tasks.sh <source.json> <tasks-dir> [output-dir]
 #   validate-tasks.sh <run-dir>
 #
-# 4개 서브게이트를 순차 검증한다:
+# 6개 서브게이트를 순차 검증한다:
 #   A-1: 스키마 — acceptance_criteria, files, depends_on 존재
 #   A-2: 스코프 — files[]가 허용 경로 범위 내
 #   A-3: 의존성 — 순환 없음, 존재하지 않는 태스크 참조 없음
-#   A-4: 커버리지 — 모든 AC가 최소 1개 태스크에 매핑
+#   A-4: AC 커버리지 — 모든 source.json AC가 최소 1개 태스크에 매핑
+#   A-5: 티켓 커버리지 — run_dir/tickets/의 모든 티켓이 최소 1개 태스크 source_tickets에 포함
+#   A-6: required_classes 커버리지 — ticket-read.json의 required_classes[]가 모든 task files[] 합집합에 포함
 #
 # 결과: tasks-validation.json (게이트 증거)
 
@@ -334,9 +336,97 @@ else
 fi
 
 # ============================================================
+# A-5: 티켓 커버리지 검증
+# run_dir/tickets/의 모든 티켓 키가 최소 1개 태스크의 source_tickets에 포함됐는지 확인
+# ============================================================
+log_info "A-5 티켓 커버리지 검증..."
+
+TICKETS_DIR_PATH="${RUN_DIR}/tickets"
+A5_UNCOVERED="[]"
+
+if [ -d "$TICKETS_DIR_PATH" ]; then
+  # 태스크 전체의 source_tickets 수집
+  ALL_SOURCE_TICKETS="[]"
+  for f in "${TASK_FILES[@]}"; do
+    st=$(jq -r '.source_tickets // [] | .[]' "$f" 2>/dev/null || true)
+    while IFS= read -r key; do
+      [ -z "$key" ] && continue
+      ALL_SOURCE_TICKETS=$(echo "$ALL_SOURCE_TICKETS" | jq --arg k "$key" '. + [$k]')
+    done <<< "$st"
+  done
+
+  # tickets/ 디렉토리의 모든 티켓 키 검사
+  for ticket_file in "${TICKETS_DIR_PATH}"/*.json; do
+    [ -f "$ticket_file" ] || continue
+    ticket_key=$(jq -r '.key // ""' "$ticket_file" 2>/dev/null)
+    [ -z "$ticket_key" ] && ticket_key=$(basename "$ticket_file" .json)
+
+    covered=$(echo "$ALL_SOURCE_TICKETS" | jq --arg k "$ticket_key" 'any(. == $k)')
+    if [ "$covered" != "true" ]; then
+      A5_UNCOVERED=$(echo "$A5_UNCOVERED" | jq --arg k "$ticket_key" '. + [$k]')
+    fi
+  done
+fi
+
+A5_UNCOVERED_COUNT=$(echo "$A5_UNCOVERED" | jq 'length')
+if [ "$A5_UNCOVERED_COUNT" -eq 0 ]; then
+  A5_STATUS="pass"
+  log_info "A-5 PASS"
+else
+  A5_STATUS="fail"
+  log_error "A-5 FAIL — source_tickets 미포함 티켓 ${A5_UNCOVERED_COUNT}개: $(echo "$A5_UNCOVERED" | jq -r 'join(", ")')"
+fi
+
+# ============================================================
+# A-6: required_classes 커버리지 검증
+# ticket-read.json의 required_classes[]가 모든 task files[] 합집합에 포함됐는지
+# ============================================================
+log_info "A-6 required_classes 커버리지 검증..."
+
+A6_UNCOVERED="[]"
+A6_STATUS="pass"
+
+REQUIRED_CLASSES=$(jq -r '.required_classes // [] | .[]' "$SOURCE_JSON" 2>/dev/null || true)
+
+if [ -n "$REQUIRED_CLASSES" ]; then
+  # 모든 task files[] 합집합 (basename 기준으로도 매칭)
+  ALL_TASK_FILES="[]"
+  for f in "${TASK_FILES[@]}"; do
+    task_files_arr=$(jq -r '.files // [] | .[]' "$f" 2>/dev/null || true)
+    while IFS= read -r fp; do
+      [ -z "$fp" ] && continue
+      ALL_TASK_FILES=$(echo "$ALL_TASK_FILES" | jq --arg fp "$fp" '. + [$fp]')
+    done <<< "$task_files_arr"
+  done
+
+  while IFS= read -r rc; do
+    [ -z "$rc" ] && continue
+    # 클래스명 기준 매칭: 전체 경로 일치 또는 파일명(basename) 포함 여부
+    rc_java="${rc%.java}.java"
+    matched=$(echo "$ALL_TASK_FILES" | jq \
+      --arg rc "$rc" \
+      --arg rcj "${rc_java}" \
+      'any(. == $rc or (. | test($rcj; "")) or (. | endswith("/" + $rcj)))')
+    if [ "$matched" != "true" ]; then
+      A6_UNCOVERED=$(echo "$A6_UNCOVERED" | jq --arg c "$rc" '. + [$c]')
+    fi
+  done <<< "$REQUIRED_CLASSES"
+
+  A6_UNCOVERED_COUNT=$(echo "$A6_UNCOVERED" | jq 'length')
+  if [ "$A6_UNCOVERED_COUNT" -gt 0 ]; then
+    A6_STATUS="fail"
+    log_error "A-6 FAIL — required_classes 누락 ${A6_UNCOVERED_COUNT}개: $(echo "$A6_UNCOVERED" | jq -r 'join(", ")')"
+  else
+    log_info "A-6 PASS"
+  fi
+else
+  log_warn "A-6 required_classes 없음 (skip)"
+fi
+
+# ============================================================
 # 최종 판정
 # ============================================================
-if [ "$A1_STATUS" = "pass" ] && [ "$A2_STATUS" = "pass" ] && [ "$A3_STATUS" = "pass" ] && [ "$A4_STATUS" = "pass" ]; then
+if [ "$A1_STATUS" = "pass" ] && [ "$A2_STATUS" = "pass" ] && [ "$A3_STATUS" = "pass" ] && [ "$A4_STATUS" = "pass" ] && [ "$A5_STATUS" = "pass" ] && [ "$A6_STATUS" = "pass" ]; then
   FINAL_STATUS="pass"
   log_info "Gate A PASS"
 else
@@ -360,6 +450,10 @@ EVIDENCE=$(jq -n \
   --argjson a3_errors "$A3_ERRORS" \
   --arg a4_status "$A4_STATUS" \
   --argjson a4_unmapped "$A4_UNMAPPED" \
+  --arg a5_status "$A5_STATUS" \
+  --argjson a5_uncovered "$A5_UNCOVERED" \
+  --arg a6_status "$A6_STATUS" \
+  --argjson a6_uncovered "$A6_UNCOVERED" \
   '{
     source: $source,
     generator: $generator,
@@ -370,7 +464,9 @@ EVIDENCE=$(jq -n \
       A1_schema: { status: $a1_status, errors: $a1_errors },
       A2_scope: { status: $a2_status, out_of_scope_files: $a2_oos },
       A3_dependency: { status: $a3_status, has_cycle: $a3_cycle, errors: $a3_errors },
-      A4_coverage: { status: $a4_status, unmapped_ac: $a4_unmapped }
+      A4_coverage: { status: $a4_status, unmapped_ac: $a4_unmapped },
+      A5_ticket_coverage: { status: $a5_status, uncovered_tickets: $a5_uncovered },
+      A6_required_classes: { status: $a6_status, uncovered_classes: $a6_uncovered }
     }
   }')
 

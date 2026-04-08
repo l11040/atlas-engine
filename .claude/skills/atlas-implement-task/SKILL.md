@@ -2,7 +2,6 @@
 name: atlas-implement-task
 description: Atlas Execute의 첫 번째 하위 스킬. task-{id}.json 기준으로 코드를 생성/수정한다.
 context: fork
-agent: atlas-execute
 user-invocable: false
 ---
 
@@ -26,6 +25,12 @@ user-invocable: false
 4. `files[]`에 명시된 파일을 생성하거나 수정한다.
 5. `acceptance_criteria`의 모든 항목을 코드에 반영한다.
 6. DDL과 엔티티 `@Column(name)`이 일치하는지 확인한다.
+7. **엔티티 어노테이션 재검증** (엔티티 파일이 포함된 경우에만):
+   source_tickets를 재독하여 아래 항목을 코드에서 직접 확인한다. 미충족 시 즉시 수정한다.
+   - `@Version`: AC에 명시된 엔티티에 `@Version Long version` 필드 존재 여부
+   - `@Audited`: AC에 명시된 엔티티에 클래스 레벨 `@Audited` 어노테이션 존재 여부
+   - `@Immutable`: AC에 명시된 엔티티에 `@Immutable` 어노테이션 존재 여부
+   - `@NotAudited`: AC에 명시된 support 엔티티에 클래스 레벨 `@NotAudited` 어노테이션 존재 여부 (클래스 레벨에 붙어야 하며, `@Audited`와 공존하면 안 됨)
 
 ## 규칙
 

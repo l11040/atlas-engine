@@ -132,6 +132,24 @@ if [ "$FAIL_COUNT" -eq 0 ]; then
     cp "$ticket_file" "${RUN_DIR}/tickets/${ticket_key}.json"
   done
   log_info "확정된 티켓 ${TOTAL_TICKETS}개를 run_dir에 복사"
+
+  # --- epic / story 컨텍스트 복사 ---
+  mkdir -p "${RUN_DIR}/context/stories"
+
+  # epic: 에픽 티켓 디렉토리 바로 아래 _epic.json
+  if [ -f "${TICKET_DIR}/_epic.json" ]; then
+    cp "${TICKET_DIR}/_epic.json" "${RUN_DIR}/context/epic.json"
+    log_info "epic 컨텍스트 복사: _epic.json"
+  fi
+
+  # story: 각 스토리 서브디렉토리의 _story.json
+  STORY_COUNT=0
+  while IFS= read -r -d '' story_file; do
+    story_dir=$(basename "$(dirname "$story_file")")
+    cp "$story_file" "${RUN_DIR}/context/stories/${story_dir}.json"
+    STORY_COUNT=$((STORY_COUNT + 1))
+  done < <(find "$TICKET_DIR" -mindepth 2 -name "_story.json" -print0)
+  log_info "story 컨텍스트 복사: ${STORY_COUNT}개"
 fi
 
 # --- phase-context.json 초기화 ---

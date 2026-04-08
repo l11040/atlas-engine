@@ -35,6 +35,8 @@ function PipelinePageInner() {
   const [timelineH, setTimelineH] = useState(TIMELINE_H_DEFAULT);
   const [timelineOpen, setTimelineOpen] = useState(true);
   const didInitRef = useRef(false);
+  // 목적: 이미 인식한 세션 ID 집합을 보관해 신규 세션 추가를 감지한다.
+  const knownSessionIdsRef = useRef<Set<string>>(new Set());
   // 목적: 드래그 시작 시점의 Y좌표와 높이를 저장한다.
   const dragRef = useRef<{ startY: number; startH: number } | null>(null);
 
@@ -89,10 +91,24 @@ function PipelinePageInner() {
     };
   }, []);
 
-  // 목적: 새 세션이 생기면 자동으로 최신 세션으로 전환한다.
+  // 목적: 새 세션이 생기면 자동으로 해당 세션으로 전환한다.
+  // 이유: prev ?? first 패턴은 prev가 이미 설정된 경우 신규 세션을 무시하므로,
+  //       knownSessionIds로 신규 세션을 감지해 명시적으로 전환한다.
   useEffect(() => {
-    if (sessions.length > 0) {
-      setSessionId((prev) => prev ?? sessions[0]!.sessionId);
+    if (sessions.length === 0) return;
+
+    // 초기 진입: 아직 인식한 세션이 없으면 첫 번째 세션 선택
+    if (knownSessionIdsRef.current.size === 0) {
+      setSessionId(sessions[0]!.sessionId);
+      sessions.forEach((s) => knownSessionIdsRef.current.add(s.sessionId));
+      return;
+    }
+
+    // 신규 세션 감지: 기존 집합에 없는 세션을 찾아 전환
+    const newSession = sessions.find((s) => !knownSessionIdsRef.current.has(s.sessionId));
+    sessions.forEach((s) => knownSessionIdsRef.current.add(s.sessionId));
+    if (newSession) {
+      setSessionId(newSession.sessionId);
     }
   }, [sessions]);
 

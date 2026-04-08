@@ -12,8 +12,8 @@ user-invocable: false
 
 ## 입력
 
-- `atlas-analyze-ticket-read` 결과
-- `run_dir/tickets/*.json`
+- `atlas-analyze-ticket-read` 결과 (`global_constraints` 포함) — `{RUN_DIR}/evidence/analyze/ticket-read.json`
+- `run_dir/tickets/*.json` — 처리 대상 리프 티켓 전체
 
 ## 출력
 
@@ -44,10 +44,13 @@ user-invocable: false
 ## 규칙
 
 - 한 태스크는 하나의 응집된 구현 단위를 가진다.
-- `files[]`는 티켓의 구조적 데이터에서 유도 가능한 경로만 포함한다.
+- **`global_constraints`를 반드시 먼저 확인한다.** ticket-read가 에픽·스토리에서 추출한 전역 제약(모듈 배치, MUST_NOT 등)은 모든 태스크의 `files[]` 경로 설계에 우선 적용된다. 서브태스크 AC와 충돌 시 상위 제약이 우선한다.
+- `files[]`는 티켓의 구조적 데이터와 전역 제약에서 유도 가능한 경로만 포함한다.
 - `depends_on[]`는 실제 선행 작업만 포함한다.
 - 모든 acceptance criteria는 최소 1개 태스크에 연결한다.
 - 필수 인자(`TICKET_KEY`, `RUN_DIR`, `CODEBASE_DIR`)가 비어 있으면 스킬 설명 요약으로 대체하지 말고 인자 누락 오류를 반환한다.
+- **`required_classes` 커버리지 보장**: 태스크 설계 완료 후 `ticket-read.json`의 `required_classes[]` 각 항목이 어느 태스크의 `files[]`에도 없으면 설계 오류다. 누락된 클래스는 가장 적합한 태스크의 `files[]`에 추가한 뒤 태스크 파일을 재저장한다. "가장 적합한 태스크"는 같은 모듈(FO/BO/batch) + 같은 레이어(service/controller/config)로 판단한다.
+- **`joint_requirements` 처리**: `ticket-read.json`의 `joint_requirements[]` 각 항목의 `classes[]`는 동일 태스크 또는 직접 의존 관계의 태스크에 배치해야 한다. 서로 의존성 없는 독립 태스크로 분리하면 안 된다. joint_requirement의 classes가 서로 다른 독립 태스크에 분산되어 있으면 하나로 합치거나 의존성을 추가한다.
 
 ## 최소 포함 필드
 
@@ -87,11 +90,19 @@ user-invocable: false
 | 티켓 | AC | 매핑된 태스크 |
 |---|---|---|
 | GRID-79 | PointAccount @Version 포함 | TASK-01 |
+
+## required_classes 커버리지
+
+| 클래스명 | 배치된 태스크 | files[] 경로 |
+|---|---|---|
+| FoPointGrantController | TASK-04 | server/fo/.../FoPointGrantController.java |
+| BoPointGrantController | TASK-05 | server/bo/.../BoPointGrantController.java |
 ```
 
 규칙:
 - `task-{id}.json` 생성 후 이 형식으로 반환한다.
 - `## AC 커버리지`는 모든 티켓의 모든 AC가 최소 1개 태스크에 매핑됐음을 확인하는 목적이다.
+- `## required_classes 커버리지`는 `ticket-read.json`의 `required_classes[]` 모든 항목이 어느 태스크에 배치됐는지 확인하는 목적이다. required_classes가 없으면 섹션을 생략한다.
 
 ## 마지막 단계 (필수)
 

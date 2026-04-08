@@ -36,6 +36,8 @@ maxTurns: 30
 Skill("atlas-analyze-ticket-read", args="TICKET_KEY={TICKET_KEY} RUN_DIR={RUN_DIR} CODEBASE_DIR={CODEBASE_DIR} TICKETS_DIR={TICKETS_DIR}")
 ```
 
+**중요**: 이 스킬은 스토리·에픽 수와 무관하게 **반드시 1회만 호출**한다. 스킬 내부에서 epic.json, stories/*.json, tickets/*.json을 모두 처리한다.
+
 Skill() 반환 후 `{RUN_DIR}/skill-results/ticket-read.md`를 Read 해서 성공 여부를 판정한다.
 추가 확인: `{RUN_DIR}/evidence/analyze/ticket-read.json` 존재 확인.
 `args`가 비어 있으면 정상 실행으로 간주하지 않는다.
